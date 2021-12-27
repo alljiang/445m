@@ -113,7 +113,7 @@
 
 #include <stdio.h>
 #include <stdint.h>
-#include "../inc/tm4c123gh6pm.h"
+#include "vware/tm4c123gh6pm.h"
 #include "../RTOS_Labs_common/ST7735.h"
 #include "../RTOS_Labs_common/OS.h"
 #include "../RTOS_Labs_common/eDisk.h"
@@ -1406,8 +1406,16 @@ void ST7735_OutUDec2(uint32_t n, uint32_t l){
 //        pt      pointer to a null terminated string to be printed
 //        value   signed integer to be printed
 void ST7735_Message(uint32_t  d, uint32_t  l, char *pt, int32_t value){
-  // write this as part of Labs 1 and 2
+    // write this as part of Labs 1 and 2
+    int8_t line = l;
+    if(d == 1) {
+        line += 8;
+    }
 
+    char str[30];
+    sprintf(str, "%s%d", pt, value);
+
+    ST7735_DrawString(0, line, str, 0x0000);
 }
 
 //-----------------------ST7735_OutUDec4-----------------------

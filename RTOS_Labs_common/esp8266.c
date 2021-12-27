@@ -50,8 +50,8 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
-#include "../inc/tm4c123gh6pm.h"
-#include "../inc/CortexM.h"
+#include "vware/tm4c123gh6pm.h"
+#include "vware/CortexM.h"
 #include "../RTOS_Labs_common/FIFO.h"
 #include "../RTOS_Labs_common/UART0int.h"
 #include "../RTOS_Labs_common/esp8266.h"
@@ -223,9 +223,9 @@ bool ReceiveDataFilter(char letter){
 #ifdef USE_UART_DRV
 
 #if ESP8266_UART==1
-#include "../inc/UART1.h"
+#include "vware/UART1.h"
 #elif ESP8266_UART==2
-#include "../inc/UART2.h"
+#include "vware/UART2.h"
 #endif
 
 //--------ESP8266_InitUart--------

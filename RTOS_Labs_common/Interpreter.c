@@ -9,8 +9,8 @@
 #include <stdio.h>
 #include "../RTOS_Labs_common/OS.h"
 #include "../RTOS_Labs_common/ST7735.h"
-#include "../inc/ADCT0ATrigger.h"
-#include "../inc/ADCSWTrigger.h"
+#include "vware/ADCT0ATrigger.h"
+#include "vware/ADCSWTrigger.h"
 #include "../RTOS_Labs_common/UART0int.h"
 #include "../RTOS_Labs_common/eDisk.h"
 #include "../RTOS_Labs_common/eFile.h"

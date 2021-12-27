@@ -5,25 +5,49 @@
 ;Jonathan Valvano, OS Lab2/3/4/5, 1/12/20
 ;Students will implement these functions as part of EE445M/EE380L.12 Lab
 
-        AREA |.text|, CODE, READONLY, ALIGN=2
-        THUMB
-        REQUIRE8
-        PRESERVE8
+        .text				;AREA |.text|, CODE, READONLY, ALIGN=2
+        .align 2
+        .thumb				;THUMB
+        					;REQUIRE8
+        					;PRESERVE8
 
-        EXTERN  RunPt            ; currently running thread
+        .ref RunPt			;EXTERN  RunPt            ; currently running thread
 
-        EXPORT  StartOS
-        EXPORT  ContextSwitch
-        EXPORT  PendSV_Handler
-        EXPORT  SVC_Handler
+        .def StartOS		;EXPORT  StartOS
+        .def ContextSwitch	;EXPORT  ContextSwitch
+        .def PendSV_Handler	;EXPORT  PendSV_Handler
+        .def SVC_Handler	;EXPORT  SVC_Handler
 
+;
+; https://users.ece.utexas.edu/~valvano/arm/ConvertKeilCCS.pdf
+;
+; .equ directly loads to symbol table
+; .field puts data
+;
+; However, using LDR with symbol is not possible with TI Compiler.
+; So, LDRs must be done by loading from a label after defining the data with .field.
+;
+; TLDR use .field for LDRs, and .equ for other stuff
+;
 
-NVIC_INT_CTRL   EQU     0xE000ED04                              ; Interrupt control state register.
-NVIC_SYSPRI14   EQU     0xE000ED22                              ; PendSV priority register (position 14).
-NVIC_SYSPRI15   EQU     0xE000ED23                              ; Systick priority register (position 15).
-NVIC_LEVEL14    EQU           0xEF                              ; Systick priority value (second lowest).
-NVIC_LEVEL15    EQU           0xFF                              ; PendSV priority value (lowest).
-NVIC_PENDSVSET  EQU     0x10000000                              ; Value to trigger PendSV exception.
+;NVIC_INT_CTRL   EQU     0xE000ED04                              ; Interrupt control state register.
+NVIC_INT_CTRL	.field	0xE000ED04, 32
+
+;NVIC_SYSPRI14   EQU     0xE000ED22                              ; PendSV priority register (position 14).
+NVIC_SYSPRI14	.field	0xE000ED22, 32
+
+;NVIC_SYSPRI15   EQU     0xE000ED23                              ; Systick priority register (position 15).
+NVIC_SYSPRI15	.field	0xE000ED23, 32
+
+;NVIC_LEVEL14    EQU           0xEF                              ; Systick priority value (second lowest).
+NVIC_LEVEL14	.equ	0xEF
+
+;NVIC_LEVEL15    EQU           0xFF                              ; PendSV priority value (lowest).
+NVIC_LEVEL15	.equ	0xFF
+
+;NVIC_PENDSVSET  EQU     0x10000000                              ; Value to trigger PendSV exception.
+NVIC_PENDSVSET	.equ	0x10000000
+
 
 
 StartOS
@@ -31,9 +55,11 @@ StartOS
     
     
     BX      LR                 ; start first thread
+	.endasmfunc
 
 OSStartHang
     B       OSStartHang        ; Should never get here
+	.endasmfunc
 
 
 ;********************************************************************************************************
@@ -48,6 +74,7 @@ ContextSwitch
 ; edit this code
     
     BX      LR
+	.endasmfunc
     
 
 ;********************************************************************************************************
@@ -91,6 +118,7 @@ PendSV_Handler
     
     
     BX      LR                 ; Exception return will restore remaining context   
+	.endasmfunc
     
 
 ;********************************************************************************************************
@@ -103,19 +131,19 @@ PendSV_Handler
 ;           Function-call paramters in R0..R3 are also auto-saved on stack on exception entry.
 ;********************************************************************************************************
 
-        IMPORT    OS_Id
-        IMPORT    OS_Kill
-        IMPORT    OS_Sleep
-        IMPORT    OS_Time
-        IMPORT    OS_AddThread
+        .ref OS_Id			;IMPORT    OS_Id
+        .ref OS_Kill		;IMPORT    OS_Kill
+       	.ref OS_Sleep		;IMPORT    OS_Sleep
+        .ref OS_Time		;IMPORT    OS_Time
+        .ref OS_AddThread	;IMPORT    OS_AddThread
 
 SVC_Handler
 ; put your Lab 5 code here
 
 
     BX      LR                   ; Return from exception
+	.endasmfunc
 
 
-
-    ALIGN
-    END
+    .align 2	;ALIGN
+    .end		;END
