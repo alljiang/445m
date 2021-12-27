@@ -6,7 +6,7 @@
 // Runs on LM4F120/TM4C123
 // Jonathan W. Valvano Jan 5, 2020, valvano@mail.utexas.edu
 #include <stdint.h>
-#include "../inc/ADCSWTrigger.h"
+#include "vware/ADCSWTrigger.h"
 
 // channelNum (0 to 11) specifies which pin is sampled with sequencer 3
 // software start

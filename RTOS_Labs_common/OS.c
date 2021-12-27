@@ -9,15 +9,15 @@
 
 #include <stdint.h>
 #include <stdio.h>
-#include "../inc/tm4c123gh6pm.h"
-#include "../inc/CortexM.h"
-#include "../inc/PLL.h"
-#include "../inc/LaunchPad.h"
-#include "../inc/Timer4A.h"
-#include "../inc/WTimer0A.h"
+#include "vware/tm4c123gh6pm.h"
+#include "vware/CortexM.h"
+#include "vware/PLL.h"
+#include "vware/LaunchPad.h"
+#include "vware/Timer4A.h"
+#include "vware/WTimer0A.h"
 #include "../RTOS_Labs_common/OS.h"
 #include "../RTOS_Labs_common/ST7735.h"
-#include "../inc/ADCT0ATrigger.h"
+#include "vware/ADCT0ATrigger.h"
 #include "../RTOS_Labs_common/UART0int.h"
 #include "../RTOS_Labs_common/eFile.h"
 

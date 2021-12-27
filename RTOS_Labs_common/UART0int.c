@@ -31,8 +31,8 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include "../inc/tm4c123gh6pm.h"
-#include "../inc/CortexM.h"
+#include "vware/tm4c123gh6pm.h"
+#include "vware/CortexM.h"
 #include "../RTOS_Labs_common/FIFO.h"
 #include "../RTOS_Labs_common/UART0int.h"
 

@@ -51,7 +51,7 @@
 // SDO  – (NC) I2C alternate address for ADXL345 accelerometer
 // Backlight + - Light, backlight connected to +3.3 V
 #include <stdint.h>
-#include "../inc/tm4c123gh6pm.h"
+#include "vware/tm4c123gh6pm.h"
 #include "../RTOS_Labs_common/eDisk.h"
 
 // these defines are in two places, here and in ST7735.c

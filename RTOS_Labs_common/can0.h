@@ -30,6 +30,7 @@
 #define __CAN0_H__
 #define CAN_BITRATE             1000000
 #include <stdint.h>
+#include <stdbool.h>
 
 
 // Returns true if receive data is available
