@@ -15,11 +15,13 @@
 #include "vware/LaunchPad.h"
 #include "vware/Timer4A.h"
 #include "vware/WTimer0A.h"
-#include "../RTOS_Labs_common/OS.h"
-#include "../RTOS_Labs_common/ST7735.h"
+#include "RTOS_Labs_common/OS.h"
+#include "RTOS_Labs_common/ST7735.h"
 #include "vware/ADCT0ATrigger.h"
-#include "../RTOS_Labs_common/UART0int.h"
-#include "../RTOS_Labs_common/eFile.h"
+#include "RTOS_Labs_common/UART0int.h"
+#include "RTOS_Labs_common/eFile.h"
+
+#include "timers.h"
 
 
 // Performance Measurements 
@@ -28,6 +30,7 @@ int32_t MaxJitter;             // largest time jitter between interrupts in usec
 uint32_t const JitterSize=JITTERSIZE;
 uint32_t JitterHistogram[JITTERSIZE]={0,};
 
+uint64_t osTimeMs;
 
 /*------------------------------------------------------------------------------
   Systick Interrupt Handler
@@ -398,8 +401,9 @@ uint32_t OS_TimeDifference(uint32_t start, uint32_t stop){
 // Outputs: none
 // You are free to change how this works
 void OS_ClearMsTime(void){
-  // put Lab 1 solution here
-
+    // put Lab 1 solution here
+    osTimeMs = 0;
+    Timer0Init();
 };
 
 // ******** OS_MsTime ************
@@ -409,8 +413,9 @@ void OS_ClearMsTime(void){
 // You are free to select the time resolution for this function
 // For Labs 2 and beyond, it is ok to make the resolution to match the first call to OS_AddPeriodicThread
 uint32_t OS_MsTime(void){
-  // put Lab 1 solution here
-  return 0; // replace this line with solution
+    // put Lab 1 solution here
+    // osTimeMs is incremented in timers.c
+    return osTimeMs;
 };
 
 

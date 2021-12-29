@@ -1,8 +1,6 @@
 eclipse.preferences.version=1
 encoding//Debug/RTOS_Labs_common/subdir_rules.mk=UTF-8
 encoding//Debug/RTOS_Labs_common/subdir_vars.mk=UTF-8
-encoding//Debug/driverlib/ccs/Debug/subdir_rules.mk=UTF-8
-encoding//Debug/driverlib/ccs/Debug/subdir_vars.mk=UTF-8
 encoding//Debug/driverlib/ewarm/Exe/subdir_rules.mk=UTF-8
 encoding//Debug/driverlib/ewarm/Exe/subdir_vars.mk=UTF-8
 encoding//Debug/driverlib/gcc/subdir_rules.mk=UTF-8
@@ -18,6 +16,8 @@ encoding//Debug/objects.mk=UTF-8
 encoding//Debug/sources.mk=UTF-8
 encoding//Debug/subdir_rules.mk=UTF-8
 encoding//Debug/subdir_vars.mk=UTF-8
+encoding//Debug/utils/subdir_rules.mk=UTF-8
+encoding//Debug/utils/subdir_vars.mk=UTF-8
 encoding//Debug/vware/subdir_rules.mk=UTF-8
 encoding//Debug/vware/subdir_vars.mk=UTF-8
 encoding//Debug/vware_unused/subdir_rules.mk=UTF-8
