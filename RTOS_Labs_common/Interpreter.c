@@ -15,60 +15,83 @@
 #include "../RTOS_Labs_common/eDisk.h"
 #include "../RTOS_Labs_common/eFile.h"
 
-
 #define EQ(a, b) (strcmp((a), (b)) == 0)
 
-
 const char help[] = "--------------------------\n"
-                    "Invalid command. Available commands:\n"
-                    "1) - \n"
-                    "2) - \n"
-                    "--------------------------\n";
-
+        "Invalid command. Available commands:\n"
+        "0) - \n"
+        "1) - \n"
+        "2) - \n"
+        "3) - \n"
+        "4) - \n"
+        "5) - \n"
+        "6) - \n"
+        "7) - \n"
+        "8) - \n"
+        "9) - \n"
+        "--------------------------\n";
 
 // Print jitter histogram
-void Jitter(int32_t MaxJitter, uint32_t const JitterSize, uint32_t JitterHistogram[]){
+void
+Jitter(int32_t MaxJitter, uint32_t const JitterSize, uint32_t JitterHistogram[]) {
     // write this for Lab 3 (the latest)
 
 }
 
-void Interpreter_Parse(char* buffer) {
+void
+Interpreter_Parse(char *buffer) {
     //  ADD NEW COMMANDS HERE
-    if(EQ(buffer, "1")) {
+    if (EQ(buffer, "0")) {
 
-    } else if(EQ(buffer, "2")) {
+    } else if (EQ(buffer, "1")) {
+
+    } else if (EQ(buffer, "2")) {
+
+    } else if (EQ(buffer, "3")) {
+
+    } else if (EQ(buffer, "4")) {
+
+    } else if (EQ(buffer, "5")) {
+
+    } else if (EQ(buffer, "6")) {
+
+    } else if (EQ(buffer, "7")) {
+
+    } else if (EQ(buffer, "8")) {
+
+    } else if (EQ(buffer, "9")) {
 
     } else {
         // invalid command, print help info
-        UART_OutString((char*)help);
+        UART_OutString((char*) help);
     }
 }
 
 // *********** Command line interpreter (shell) ************
-void Interpreter(void){ 
+void
+Interpreter(void) {
     // write this
     char input;
     char buffer[50];
     uint8_t buffer_index = 0;
 
-    while(1) {
+    while (1) {
         input = UART_InChar();
         UART_OutChar(input);
 
-        if(input != '\n' || buffer_index >= sizeof(buffer)) {
-            //  still adding to buffer
+        if (input != '\n' || buffer_index >= sizeof(buffer)) {
+            // still adding to buffer
             buffer[buffer_index] = input;
             buffer_index++;
         } else {
-            //  add null terminator to buffer
+            // add null terminator to buffer
             buffer[buffer_index] = 0;
             buffer_index = 0;
 
-            //  parse buffer for valid command
+            // parse buffer for valid command
             Interpreter_Parse(buffer);
         }
 
     }
 }
-
 
