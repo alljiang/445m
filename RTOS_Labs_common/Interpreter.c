@@ -5,15 +5,18 @@
 // Runs on LM4F120/TM4C123
 // Jonathan W. Valvano 1/18/20, valvano@mail.utexas.edu
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h> 
 #include <stdio.h>
-#include "../RTOS_Labs_common/OS.h"
-#include "../RTOS_Labs_common/ST7735.h"
 #include "vware/ADCT0ATrigger.h"
 #include "vware/ADCSWTrigger.h"
-#include "../RTOS_Labs_common/UART0int.h"
-#include "../RTOS_Labs_common/eDisk.h"
-#include "../RTOS_Labs_common/eFile.h"
+#include "RTOS_Labs_common/OS.h"
+#include "RTOS_Labs_common/ADC.h"
+#include "RTOS_Labs_common/ST7735.h"
+#include "RTOS_Labs_common/UART0int.h"
+#include "RTOS_Labs_common/eDisk.h"
+#include "RTOS_Labs_common/eFile.h"
+
 
 #define EQ(a, b) (strcmp((a), (b)) == 0)
 
@@ -76,6 +79,21 @@ exit:
     return rv;
 }
 
+int
+get_next_token_as_int(char **buffer) {
+    char *token = get_next_token(buffer);
+    int rv;
+
+    if (token == NULL) {
+        rv = -1;
+        goto exit;
+    }
+    rv = strtol(token, NULL, 10);
+
+exit:
+    return rv;
+}
+
 void
 Interpreter_Parse(char *buffer) {
     char *token;
@@ -83,9 +101,11 @@ Interpreter_Parse(char *buffer) {
 
     //  ADD NEW COMMANDS HERE
     if (EQ("0", token)) {
-
+        // Test timer
+        OS_ClearMsTime();
     } else if (EQ("1", token)) {
-
+        // Test timer
+        UART_OutUDec((uint32_t)OS_MsTime());
     } else if (EQ("2", token)) {
 
     } else if (EQ("3", token)) {
@@ -101,6 +121,25 @@ Interpreter_Parse(char *buffer) {
     } else if (EQ("8", token)) {
 
     } else if (EQ("9", token)) {
+
+    } else if (EQ("lcd", token)) {
+        uint8_t screen = get_next_token_as_int(&buffer);
+        uint8_t row = get_next_token_as_int(&buffer);
+        char* str = get_next_token(&buffer);
+        ST7735_Message(screen, row, str, 0);
+    } else if (EQ("adc", token)) {
+        char voltage_formatted_str[6];
+
+        float adc_voltage = ADC_In_Voltage();
+        sprintf(voltage_formatted_str, "%0.2fV", adc_voltage);
+        UART_OutString((char*) voltage_formatted_str);
+    } else if (EQ("", token)) {
+
+    } else if (EQ("", token)) {
+
+    } else if (EQ("", token)) {
+
+    } else if (EQ("", token)) {
 
     } else {
         // invalid command, print help info
