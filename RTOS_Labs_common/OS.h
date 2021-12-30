@@ -267,7 +267,7 @@ void OS_ClearMsTime(void);
 // Outputs: time in ms units
 // You are free to select the time resolution for this function
 // It is ok to make the resolution to match the first call to OS_AddPeriodicThread
-uint32_t OS_MsTime(void);
+uint64_t OS_MsTime(void);
 
 //******** OS_Launch *************** 
 // start the scheduler, enable interrupts

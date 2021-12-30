@@ -450,7 +450,7 @@ OS_ClearMsTime(void) {
 // Outputs: time in ms units
 // You are free to select the time resolution for this function
 // For Labs 2 and beyond, it is ok to make the resolution to match the first call to OS_AddPeriodicThread
-uint32_t
+uint64_t
 OS_MsTime(void) {
     // put Lab 1 solution here
     // osTimeMs is incremented in timers.c
