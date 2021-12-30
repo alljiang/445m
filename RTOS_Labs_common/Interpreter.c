@@ -16,16 +16,59 @@
 #include "../RTOS_Labs_common/eFile.h"
 
 
+#define EQ(a, b) (strcmp((a), (b)) == 0)
+
+
+const char help[] = "--------------------------\n"
+                    "Invalid command. Available commands:\n"
+                    "1) - \n"
+                    "2) - \n"
+                    "--------------------------\n";
+
+
 // Print jitter histogram
 void Jitter(int32_t MaxJitter, uint32_t const JitterSize, uint32_t JitterHistogram[]){
-  // write this for Lab 3 (the latest)
-	
+    // write this for Lab 3 (the latest)
+
+}
+
+void Interpreter_Parse(char* buffer) {
+    //  ADD NEW COMMANDS HERE
+    if(EQ(buffer, "1")) {
+
+    } else if(EQ(buffer, "2")) {
+
+    } else {
+        // invalid command, print help info
+        UART_OutString((char*)help);
+    }
 }
 
 // *********** Command line interpreter (shell) ************
 void Interpreter(void){ 
-  // write this  
+    // write this
+    char input;
+    char buffer[50];
+    uint8_t buffer_index = 0;
 
+    while(1) {
+        input = UART_InChar();
+        UART_OutChar(input);
+
+        if(input != '\n' || buffer_index >= sizeof(buffer)) {
+            //  still adding to buffer
+            buffer[buffer_index] = input;
+            buffer_index++;
+        } else {
+            //  add null terminator to buffer
+            buffer[buffer_index] = 0;
+            buffer_index = 0;
+
+            //  parse buffer for valid command
+            Interpreter_Parse(buffer);
+        }
+
+    }
 }
 
 
