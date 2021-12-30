@@ -38,28 +38,69 @@ Jitter(int32_t MaxJitter, uint32_t const JitterSize, uint32_t JitterHistogram[])
 
 }
 
+/*
+ * Returns pointer to the next token in the buffer (delimited by space or newline).
+ * Also modifies the buffer and replaces the delimited space/newline with a null terminator for easier parsing.
+ * Updates buffer to point to next next token, or NULL if no more tokens.
+ *
+ * Returns NULL if no token is found.
+ */
+char*
+get_next_token(char **buffer) {
+    char *str = *buffer;
+    char *rv = str;
+    uint16_t i = 0;
+
+    // Null buffer was passed in, no more tokens
+    if (str == NULL) {
+        rv = NULL;
+        goto exit;
+    }
+
+    while (str[i] != '\n' && str[i] != ' ') {
+        i++;
+    }
+
+    if (str[i] == '\n') {
+        // No more tokens, so replace buffer with NULL
+        *buffer = NULL;
+    } else {
+        // Update buffer to point to next token
+        *buffer = str + i + 1;
+    }
+
+    // Replace delimiter with null terminator
+    str[i] = '\0';
+
+exit:
+    return rv;
+}
+
 void
 Interpreter_Parse(char *buffer) {
+    char *token;
+    token = get_next_token(&buffer);
+
     //  ADD NEW COMMANDS HERE
-    if (EQ(buffer, "0")) {
+    if (EQ("0", token)) {
 
-    } else if (EQ(buffer, "1")) {
+    } else if (EQ("1", token)) {
 
-    } else if (EQ(buffer, "2")) {
+    } else if (EQ("2", token)) {
 
-    } else if (EQ(buffer, "3")) {
+    } else if (EQ("3", token)) {
 
-    } else if (EQ(buffer, "4")) {
+    } else if (EQ("4", token)) {
 
-    } else if (EQ(buffer, "5")) {
+    } else if (EQ("5", token)) {
 
-    } else if (EQ(buffer, "6")) {
+    } else if (EQ("6", token)) {
 
-    } else if (EQ(buffer, "7")) {
+    } else if (EQ("7", token)) {
 
-    } else if (EQ(buffer, "8")) {
+    } else if (EQ("8", token)) {
 
-    } else if (EQ(buffer, "9")) {
+    } else if (EQ("9", token)) {
 
     } else {
         // invalid command, print help info
@@ -94,4 +135,3 @@ Interpreter(void) {
 
     }
 }
-
