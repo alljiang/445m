@@ -28,18 +28,18 @@
 // PE2 Ain1 sampled at 250Hz, sequencer 0, by Producer, timer tigger
 
 #include <stdint.h>
-#include "../inc/tm4c123gh6pm.h"
-#include "../inc/CortexM.h"
-#include "../inc/LaunchPad.h"
-#include "../inc/PLL.h"
-#include "../inc/LPF.h"
-#include "../RTOS_Labs_common/UART0int.h"
-#include "../RTOS_Labs_common/ADC.h"
-#include "../inc/ADCT0ATrigger.h"
-#include "../inc/IRDistance.h"
-#include "../RTOS_Labs_common/OS.h"
-#include "../RTOS_Labs_common/Interpreter.h"
-#include "../RTOS_Labs_common/ST7735.h"
+#include "vware/tm4c123gh6pm.h"
+#include "vware/CortexM.h"
+#include "vware/LaunchPad.h"
+#include "vware/PLL.h"
+#include "vware/LPF.h"
+#include "RTOS_Labs_common/UART0int.h"
+#include "RTOS_Labs_common/ADC.h"
+#include "vware/ADCT0ATrigger.h"
+#include "vware/IRDistance.h"
+#include "RTOS_Labs_common/OS.h"
+#include "RTOS_Labs_common/Interpreter.h"
+#include "RTOS_Labs_common/ST7735.h"
 
 
 //*********Prototype for FFT in cr4_fft_64_stm32.s, STMicroelectronics
@@ -244,8 +244,10 @@ void Display(void){
 // never blocks, never sleeps, never dies
 // inputs:  none
 // outputs: none
-short IntTerm;     // accumulated error, RPM-sec
-short PrevError;   // previous error, RPM
+//short IntTerm;     // accumulated error, RPM-sec
+extern short IntTerm;
+//short PrevError;   // previous error, RPM
+extern short PrevError;
 short Coeff[3];    // PID coefficients
 short Actuator;
 void PID(void){ 
