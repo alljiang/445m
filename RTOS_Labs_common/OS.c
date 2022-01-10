@@ -29,6 +29,12 @@ uint32_t const JitterSize = JITTERSIZE;
 uint32_t JitterHistogram[JITTERSIZE] = { 0, };
 
 uint64_t osTimeMs;
+int id_counter = 0;
+
+#define MAX_THREADS_COUNT 20
+#define THREAD_STACK_SIZE 100;
+TCB_t threads_list[MAX_THREADS_COUNT];
+int32_t stack[MAX_THREADS_COUNT][THREAD_STACK_SIZE];
 
 /*------------------------------------------------------------------------------
  Systick Interrupt Handler
@@ -67,6 +73,10 @@ void
 OS_Init(void) {
     // put Lab 2 (and beyond) solution here
 
+    // label all threads in list as dead
+    for (int i = 0; i < MAX_THREADS_COUNT; i++) {
+        threads_list[i].id = -1;
+    }
 }
 ;
 
@@ -132,22 +142,60 @@ OS_bSignal(Sema4Type *semaPt) {
 ;
 
 //******** OS_AddThread *************** 
-// add a foregound thread to the scheduler
+// add a foreground thread to the scheduler
 // Inputs: pointer to a void/void foreground task
 //         number of bytes allocated for its stack
 //         priority, 0 is highest, 5 is the lowest
 // Outputs: 1 if successful, 0 if this thread can not be added
-// stack size must be divisable by 8 (aligned to double word boundary)
+// stack size must be divisible by 8 (aligned to double word boundary)
 // In Lab 2, you can ignore both the stackSize and priority fields
 // In Lab 3, you can ignore the stackSize fields
 int
 OS_AddThread(void
 (*task)(void), uint32_t stackSize, uint32_t priority) {
     // put Lab 2 (and beyond) solution here
+    int rv = 1;
+    int list_index = -1;
+    TCBPtr tcb_ptr = NULL;
 
-    return 0; // replace this line with solution
+    if (task == NULL) {
+        // task is invalid
+        rv = 0;
+        goto exit;
+    }
+
+    if(stackSize % 8 != 0) {
+        // stack size must be divisible by 8
+        rv = 0;
+        goto exit;
+    }
+
+    // search for a dead TCB to recycle (find the first occurrence of id == -1)
+    for (int i = 0; i < MAX_THREADS_COUNT; i++) {
+        if (threads_list[i].id == -1) {
+            list_index = i;
+            tcb_ptr = &threads_list[i];
+            break;
+        }
+    }
+
+    if(tcb_ptr == NULL) {
+        // no dead TCBs available, too many active threads
+        // increase MAX_THREADS_COUNT
+        rv = 0;
+        goto exit;
+    }
+
+    // populate TCB entry
+    *tcb_ptr->id = id_counter++;            // id is unique, monotonically generated
+    *tcb_ptr->stack_pointer = stack[list_index];
+
+    // initialize this newly generated task's stack
+    stack[list_index][0] =
+
+exit:
+    return rv; // replace this line with solution
 }
-;
 
 //******** OS_AddProcess *************** 
 // add a process with foregound thread to the scheduler

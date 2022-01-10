@@ -32,10 +32,14 @@ struct Sema4 {
 };
 typedef struct Sema4 Sema4Type;
 
+// Lecture 3 Slide 16
 typedef struct TCB {
     uintptr_t stack_pointer;
     struct TCB *TCB_previous, *TCB_next;
-
+    int id;
+    long sleep_state;
+    int priority;           // lab 3
+    int blocked_state;   // lab 3
 } TCB_t;
 typedef TCB_t *TCBPtr;
 
