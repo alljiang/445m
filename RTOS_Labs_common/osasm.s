@@ -12,6 +12,10 @@
         					;PRESERVE8
 
         .ref RunPt			;EXTERN  RunPt            ; currently running thread
+		.align 4
+RunPt_Pt
+		.field RunPt, 32
+        .align 2
 
         .def StartOS		;EXPORT  StartOS
         .def ContextSwitch	;EXPORT  ContextSwitch
@@ -52,8 +56,22 @@ NVIC_PENDSVSET	.equ	0x10000000
 
 StartOS
 ; put your code here
+    ; Load SP with RunPt.SP
+    LDR R0, RunPt_Pt			; R0 <- Pointer to RunPt
+    LDR R0, [R0]				; R0 <- RunPt
+    LDR SP, [R0, #0]			; SP <- RunPt.stack_pointer
     
-    
+    ; Restore registers
+    POP {R4-R11}
+    POP {R0-R3}
+    POP {R12}
+
+    ADD SP, SP, #4				; discard LR
+    POP {LR}					; LR <- PC
+    ADD SP, SP, #4				; discard PSR
+
+    CPSIE I						; enable interrupts
+
     BX      LR                 ; start first thread
 	.endasmfunc
 

@@ -14,21 +14,21 @@
 ;* INFORMATION CONTAINED HEREIN IN CONNECTION WITH THEIR PRODUCTS.
 ;*******************************************************************************/
 
+	.text				;  AREA |.text|, CODE, READONLY, ALIGN=2
+	.align 2
 	.thumb				;  THUMB
 						;  REQUIRE8
 						;  PRESERVE8
 
-	.align 2
 	.global PID_stm32	;  EXPORT PID_stm32
-	.def IntTerm		;  IMPORT IntTerm
-	.def PrevError	;  IMPORT PrevError
-IntTerm:
-	.field 16
-PrevError:
-	.field 16
+	.ref IntTerm		;  IMPORT IntTerm
+	.ref PrevError		;  IMPORT PrevError
+	.align 4
+IntTerm_Pt:
+	.field IntTerm, 32
+PrevError_Pt:
+	.field PrevError, 32
 	.align 2
-
-	.text				;  AREA |.text|, CODE, READONLY, ALIGN=2
 
 
 ;Err     RN R0    				; 1st function input: Error
@@ -52,9 +52,8 @@ PrevError:
 ;*******************************************************************************/
 PID_stm32:
 	PUSH {R4, R5, R9} 		;  PUSH {R4, R5, R9}
-	LDR R12, IntTerm 		;  LDR R12, =IntTerm
-	LDR R9, PrevError		;  LDR R9, =PrevError
-	B IntTerm
+	LDR R12, IntTerm_Pt		;  LDR R12, =IntTerm
+	LDR R9, PrevError_Pt	;  LDR R9, =PrevError
 
 	LDRH R3, [R1, #0]  		;  LDRH Kp, [Coeff, #0]  		; Load Kp
 	LDRH R2, [R1, #2]  		;  LDRH Ki, [Coeff, #2]  		; Load Ki
@@ -67,7 +66,7 @@ PID_stm32:
 	SUBS R12, R0, R12   	;  SUBS PrevErr, Err, PrevErr    ; PrevErr now holds DeltaError = Error - PrevError
 	MLA R2, R1, R12, R4 	;  MLA Result, Kd, PrevErr, Out  ; Output += Kd * DeltaError
 	
-	LDR R12, IntTerm		;  LDR R12, =IntTerm
+	LDR R12, IntTerm_Pt		;  LDR R12, =IntTerm
 	STRH R5, [R12, #0]		;  STRH Integ, [R12, #0]       	; Write back InTerm
 	STRH R0, [R9, #0]   	;  STRH Err, [R9, #0]         	; Write back PrevError
 	

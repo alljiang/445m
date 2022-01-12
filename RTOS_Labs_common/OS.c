@@ -22,6 +22,8 @@
 
 #include "timers.h"
 
+extern void StartOS(void);
+
 // Performance Measurements 
 int32_t MaxJitter;             // largest time jitter between interrupts in usec
 #define JITTERSIZE 64
@@ -32,8 +34,10 @@ uint64_t osTimeMs;
 int id_counter = 0;
 
 #define MAX_THREADS_COUNT 20
-#define THREAD_STACK_SIZE 100;
-TCB_t threads_list[MAX_THREADS_COUNT];
+#define THREAD_STACK_SIZE 100
+TCB_t tcb_list[MAX_THREADS_COUNT];
+TCBPtr RunPt;
+
 int32_t stack[MAX_THREADS_COUNT][THREAD_STACK_SIZE];
 
 /*------------------------------------------------------------------------------
@@ -75,7 +79,7 @@ OS_Init(void) {
 
     // label all threads in list as dead
     for (int i = 0; i < MAX_THREADS_COUNT; i++) {
-        threads_list[i].id = -1;
+        tcb_list[i].id = -1;
     }
 }
 ;
@@ -164,7 +168,7 @@ OS_AddThread(void
         goto exit;
     }
 
-    if(stackSize % 8 != 0) {
+    if (stackSize % 8 != 0) {
         // stack size must be divisible by 8
         rv = 0;
         goto exit;
@@ -172,14 +176,14 @@ OS_AddThread(void
 
     // search for a dead TCB to recycle (find the first occurrence of id == -1)
     for (int i = 0; i < MAX_THREADS_COUNT; i++) {
-        if (threads_list[i].id == -1) {
+        if (tcb_list[i].id == -1) {
             list_index = i;
-            tcb_ptr = &threads_list[i];
+            tcb_ptr = &tcb_list[i];
             break;
         }
     }
 
-    if(tcb_ptr == NULL) {
+    if (tcb_ptr == NULL) {
         // no dead TCBs available, too many active threads
         // increase MAX_THREADS_COUNT
         rv = 0;
@@ -187,11 +191,27 @@ OS_AddThread(void
     }
 
     // populate TCB entry
-    *tcb_ptr->id = id_counter++;            // id is unique, monotonically generated
-    *tcb_ptr->stack_pointer = stack[list_index];
+    tcb_ptr->id = id_counter++;         // id is unique, monotonically generated
+    tcb_ptr->stack_pointer = (uintptr_t) stack[list_index][THREAD_STACK_SIZE
+            - 16];
 
     // initialize this newly generated task's stack
-    stack[list_index][0] =
+    stack[list_index][THREAD_STACK_SIZE - 1] = 0;                   // PSR
+    stack[list_index][THREAD_STACK_SIZE - 2] = (int32_t) task;      // PC
+    stack[list_index][THREAD_STACK_SIZE - 3] = 0;                   // R14/LR
+    stack[list_index][THREAD_STACK_SIZE - 4] = 0;                   // R12
+    stack[list_index][THREAD_STACK_SIZE - 5] = 0;                   // R3
+    stack[list_index][THREAD_STACK_SIZE - 6] = 0;                   // R2
+    stack[list_index][THREAD_STACK_SIZE - 7] = 0;                   // R1
+    stack[list_index][THREAD_STACK_SIZE - 8] = 0;                   // R0
+    stack[list_index][THREAD_STACK_SIZE - 9] = 0;                   // R11
+    stack[list_index][THREAD_STACK_SIZE - 10] = 0;                  // R10
+    stack[list_index][THREAD_STACK_SIZE - 11] = 0;                  // R9
+    stack[list_index][THREAD_STACK_SIZE - 12] = 0;                  // R8
+    stack[list_index][THREAD_STACK_SIZE - 13] = 0;                  // R7
+    stack[list_index][THREAD_STACK_SIZE - 14] = 0;                  // R6
+    stack[list_index][THREAD_STACK_SIZE - 15] = 0;                  // R5
+    stack[list_index][THREAD_STACK_SIZE - 16] = 0;                  // R4
 
 exit:
     return rv; // replace this line with solution
@@ -517,7 +537,7 @@ OS_MsTime(void) {
 void
 OS_Launch(uint32_t theTimeSlice) {
     // put Lab 2 (and beyond) solution here
-
+    StartOS();
 }
 ;
 
