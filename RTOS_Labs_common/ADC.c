@@ -109,5 +109,11 @@ uint32_t ADC_In(void){
 }
 
 float ADC_In_Voltage(void) {
-    return ADC_In() * 3.3 / 4096.;
+    float x = ADC_In();
+
+    x *= 3.3;
+
+    x /= 4096.;
+    return x;
+//    return ADC_In() * 3.3 / 4096.;
 }

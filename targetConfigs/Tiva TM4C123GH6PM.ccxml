@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <configurations XML_version="1.2" id="configurations_0">
-                                        
+                                            
+    
     
     
     
@@ -10,7 +11,8 @@
     
     
     <configuration XML_version="1.2" id="configuration_0">
-                                                                                
+                                                                                        
+        
         
         
         
@@ -20,7 +22,8 @@
         
         
         <instance XML_version="1.2" desc="Stellaris In-Circuit Debug Interface" href="connections/Stellaris_ICDI_Connection.xml" id="Stellaris In-Circuit Debug Interface" xml="Stellaris_ICDI_Connection.xml" xmlpath="connections"/>
-                                                                                
+                                                                                        
+        
         
         
         
@@ -30,7 +33,8 @@
         
         
         <connection XML_version="1.2" id="Stellaris In-Circuit Debug Interface">
-                                                                                                                        
+                                                                                                                                    
+            
             
             
             
@@ -40,7 +44,8 @@
             
             
             <instance XML_version="1.2" href="drivers/stellaris_cs_dap.xml" id="drivers" xml="stellaris_cs_dap.xml" xmlpath="drivers"/>
-                                                                                                                        
+                                                                                                                                    
+            
             
             
             
@@ -50,7 +55,8 @@
             
             
             <instance XML_version="1.2" href="drivers/stellaris_cortex_m4.xml" id="drivers" xml="stellaris_cortex_m4.xml" xmlpath="drivers"/>
-                                                                                                                        
+                                                                                                                                    
+            
             
             
             
@@ -60,7 +66,8 @@
             
             
             <platform XML_version="1.2" id="platform_0">
-                                                                                                                                                                
+                                                                                                                                                                                
+                
                 
                 
                 
@@ -70,7 +77,8 @@
                 
                 
                 <instance XML_version="1.2" desc="Tiva TM4C123GH6PM" href="devices/tm4c123gh6pm.xml" id="Tiva TM4C123GH6PM" xml="tm4c123gh6pm.xml" xmlpath="devices"/>
-                                                                                                                                                            
+                                                                                                                                                                            
+            
             
             
             
@@ -80,7 +88,8 @@
             
             
             </platform>
-                                                                                                                    
+                                                                                                                                
+        
         
         
         
@@ -90,7 +99,8 @@
         
         
         </connection>
-                                                                            
+                                                                                    
+    
     
     
     
@@ -100,7 +110,8 @@
     
     
     </configuration>
-                                    
+                                        
+
 
 
 

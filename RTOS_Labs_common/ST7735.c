@@ -117,6 +117,7 @@
 #include "../RTOS_Labs_common/ST7735.h"
 #include "../RTOS_Labs_common/OS.h"
 #include "../RTOS_Labs_common/eDisk.h"
+#include "str_utils.h"
 // these defines are in two places, here and in eDisk.c
 #define SDC_CS_PB0 1
 #define SDC_CS_PD7 0
@@ -1399,23 +1400,33 @@ void ST7735_OutUDec2(uint32_t n, uint32_t l){
   Message[Messageindex] = 0; // terminate
   ST7735_DrawString(14,l,Message,ST7735_YELLOW);
 }
+
 //------------ST7735_Message------------
 // String draw and number output.  
-// Input: device  0 is on top, 1 is on bottom
+// Input: device  0 is on top, 1 is on bottom.
 //        line    row from top, 0 to 7 for each device
 //        pt      pointer to a null terminated string to be printed
 //        value   signed integer to be printed
+char buffer[50];
 void ST7735_Message(uint32_t  d, uint32_t  l, char *pt, int32_t value){
+    int i = 0;
+
     // write this as part of Labs 1 and 2
     int8_t line = l;
     if(d == 1) {
         line += 8;
     }
 
-    char str[30];
-    sprintf(str, "%s%d", pt, value);
+    // copy pt string to buffer
+    while(*pt) {
+        buffer[i++] = *pt;
+        pt++;
+    }
+    itoa(value, buffer + i);
 
-    ST7735_DrawString(0, line, str, 0x0000);
+
+    // First, draw the text
+    ST7735_DrawString(0, line, buffer, 0xFFFF);
 }
 
 //-----------------------ST7735_OutUDec4-----------------------

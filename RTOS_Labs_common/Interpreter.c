@@ -5,9 +5,11 @@
 // Runs on LM4F120/TM4C123
 // Jonathan W. Valvano 1/18/20, valvano@mail.utexas.edu
 #include <stdint.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h> 
 #include <stdio.h>
+#include "str_utils.h"
 #include "vware/ADCT0ATrigger.h"
 #include "vware/ADCSWTrigger.h"
 #include "RTOS_Labs_common/OS.h"
@@ -20,19 +22,22 @@
 
 #define EQ(a, b) (strcmp((a), (b)) == 0)
 
-const char help[] = "--------------------------\n"
-        "Invalid command. Available commands:\n"
-        "0) - \n"
-        "1) - \n"
-        "2) - \n"
-        "3) - \n"
-        "4) - \n"
-        "5) - \n"
-        "6) - \n"
-        "7) - \n"
-        "8) - \n"
-        "9) - \n"
-        "--------------------------\n";
+char buffer[50];
+volatile bool printedPrompt;
+
+const char help[] = "--------------------------\r\n"
+        "Invalid command. Available commands:\r\n"
+        "0) - \r\n"
+        "1) - \r\n"
+        "2) - \r\n"
+        "3) - \r\n"
+        "4) - \r\n"
+        "5) - \r\n"
+        "6) - \r\n"
+        "7) - \r\n"
+        "8) - \r\n"
+        "9) - \r\n"
+        "--------------------------\r\n";
 
 // Print jitter histogram
 void
@@ -60,7 +65,7 @@ get_next_token(char **buffer) {
         goto exit;
     }
 
-    while (str[i] != '\n' && str[i] != ' ') {
+    while (str[i] != '\n' && str[i] != ' ' && str[i] != 0) {
         i++;
     }
 
@@ -99,6 +104,8 @@ Interpreter_Parse(char *buffer) {
     char *token;
     token = get_next_token(&buffer);
 
+    printedPrompt = false;
+
     //  ADD NEW COMMANDS HERE
     if (EQ("0", token)) {
         // Test timer
@@ -106,6 +113,7 @@ Interpreter_Parse(char *buffer) {
     } else if (EQ("1", token)) {
         // Test timer
         UART_OutUDec((uint32_t)OS_MsTime());
+        UART_OutString("\r\n");
     } else if (EQ("2", token)) {
 
     } else if (EQ("3", token)) {
@@ -129,10 +137,29 @@ Interpreter_Parse(char *buffer) {
         ST7735_Message(screen, row, str, 0);
     } else if (EQ("adc", token)) {
         char voltage_formatted_str[6];
+        char itoa_buf[3];
 
         float adc_voltage = ADC_In_Voltage();
-        sprintf(voltage_formatted_str, "%0.2fV", adc_voltage);
-        UART_OutString((char*) voltage_formatted_str);
+        int fixed_pt = adc_voltage * 100;
+        itoa(fixed_pt, itoa_buf);
+
+        for(int i = 0; i < 3; i++) {
+            if(itoa_buf[i] == 0 || itoa_buf[i] > '9' || itoa_buf[i] < '0') {
+                voltage_formatted_str[i] = '0';
+            } else {
+                voltage_formatted_str[i] = itoa_buf[i];
+            }
+        }
+
+        // scoot decimal digits down to make room for decimal point
+        voltage_formatted_str[3] = voltage_formatted_str[2];
+        voltage_formatted_str[2] = voltage_formatted_str[1];
+        voltage_formatted_str[1] = '.';
+        voltage_formatted_str[4] = 'V';
+        voltage_formatted_str[5] = 0;
+
+        UART_OutString(voltage_formatted_str);
+        UART_OutString("\r\n");
     } else if (EQ("", token)) {
 
     } else if (EQ("", token)) {
@@ -152,14 +179,22 @@ void
 Interpreter(void) {
     // write this
     char input;
-    char buffer[50];
     uint8_t buffer_index = 0;
+    printedPrompt = false;
 
     while (1) {
+        if(!printedPrompt) {
+            UART_OutChar('>');
+            UART_OutChar(' ');
+            printedPrompt = true;
+        }
         input = UART_InChar();
         UART_OutChar(input);
 
-        if (input != '\n' || buffer_index >= sizeof(buffer)) {
+        if(input == '\r')
+            UART_OutChar('\n');
+
+        if (input != '\r' || buffer_index >= sizeof(buffer) - 1) {
             // still adding to buffer
             buffer[buffer_index] = input;
             buffer_index++;
