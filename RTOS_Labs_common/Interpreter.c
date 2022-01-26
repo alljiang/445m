@@ -27,8 +27,8 @@ volatile bool printedPrompt;
 
 const char help[] = "--------------------------\r\n"
         "Invalid command. Available commands:\r\n"
-        "0) - \r\n"
-        "1) - \r\n"
+        "0) adc - Prints voltage readout of PE0\r\n"
+        "1) lcd <display, 0/1> <line, 0-8> <word> - Prints line to screen\r\n"
         "2) - \r\n"
         "3) - \r\n"
         "4) - \r\n"

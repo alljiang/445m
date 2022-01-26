@@ -63,6 +63,8 @@ main(void) {
     OS_ClearMsTime();             // start a periodic interrupt to maintain time
     EnableInterrupts();
 
+    ST7735_DrawFastHLine(0, 78, 128, 0xFFFF);
+
     Interpreter();           // finally, launch interpreter, should never return
 }
 
