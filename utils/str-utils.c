@@ -7,6 +7,11 @@
 
 #include <stdint.h>
 
+/*
+ * Changes a number of variable length to a character.
+ * Must pass in a char buffer that is long enough for
+ * the value.
+ */
 int
 itoa(int value, char *ptr) {
     int count = 0, temp;

@@ -24,7 +24,7 @@
 #define EQ(a, b) (strcmp((a), (b)) == 0)
 
 char buffer[50];
-volatile bool printedPrompt;
+volatile bool printed_Prompt;
 
 const char help[] = "--------------------------\r\n"
         "Invalid command. Available commands:\r\n"
@@ -55,7 +55,7 @@ Jitter(int32_t MaxJitter, uint32_t const JitterSize, uint32_t JitterHistogram[])
  * Returns NULL if no token is found.
  */
 char*
-get_next_token(char **buffer) {
+getNextToken(char **buffer) {
     char *str = *buffer;
     char *rv = str;
     uint16_t i = 0;
@@ -86,8 +86,8 @@ exit:
 }
 
 int
-get_next_token_as_int(char **buffer) {
-    char *token = get_next_token(buffer);
+getNextTokenAsInt(char **buffer) {
+    char *token = getNextToken(buffer);
     int rv;
 
     if (token == NULL) {
@@ -103,9 +103,9 @@ exit:
 void
 Interpreter_Parse(char *buffer) {
     char *token;
-    token = get_next_token(&buffer);
+    token = getNextToken(&buffer);
 
-    printedPrompt = false;
+    printed_Prompt = false;
 
     //  ADD NEW COMMANDS HERE
     if (EQ("0", token)) {
@@ -132,9 +132,9 @@ Interpreter_Parse(char *buffer) {
     } else if (EQ("9", token)) {
 
     } else if (EQ("lcd", token)) {
-        uint8_t screen = get_next_token_as_int(&buffer);
-        uint8_t row = get_next_token_as_int(&buffer);
-        char *str = get_next_token(&buffer);
+        uint8_t screen = getNextTokenAsInt(&buffer);
+        uint8_t row = getNextTokenAsInt(&buffer);
+        char *str = getNextToken(&buffer);
         ST7735_Message(screen, row, str, 0);
     } else if (EQ("adc", token)) {
         char voltage_formatted_str[6];
@@ -181,13 +181,13 @@ Interpreter(void) {
     // write this
     char input;
     uint8_t buffer_index = 0;
-    printedPrompt = false;
+    printed_Prompt = false;
 
     while (1) {
-        if (!printedPrompt) {
+        if (!printed_Prompt) {
             UART_OutCharNonBlock('>');
             UART_OutCharNonBlock(' ');
-            printedPrompt = true;
+            printed_Prompt = true;
         }
         do {
             input = UART_InCharNonBlock();

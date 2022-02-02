@@ -2,7 +2,11 @@
 // Lab1.c - main program
 //*****************************************************************************
 
-// Jonathan W. Valvano 1/10/20, valvano@mail.utexas.edu
+// Allen & Sophia Jiang
+// TA: Jeagun Jung
+// Lab 1
+// Created: 1/20/22
+// Last revision: 2/2/22
 // EE445M/EE380L.6 
 // Simply put, develop a TM4C123 project with 
 // 1) an interpreter running via the UART link to the PC, 
@@ -17,6 +21,19 @@
 // J6/A2/PE2 analog channel 1 
 // J7/A1/PE1 analog channel 2
 // J8/A0/PE0 analog channel 3 <- connect an IR distance sensor to J8 to get a realistic analog signal on PE0
+
+// **********ST7735 TFT and SDC*******************
+// ST7735
+// Backlight (pin 10) connected to +3.3 V
+// MISO (pin 9) unconnected
+// SCK (pin 8) connected to PA2 (SSI0Clk)
+// MOSI (pin 7) connected to PA5 (SSI0Tx)
+// TFT_CS (pin 6) connected to PA3 (SSI0Fss)
+// CARD_CS (pin 5) unconnected
+// Data/Command (pin 4) connected to PA6 (GPIO), high for data, low for command
+// RESET (pin 3) connected to PA7 (GPIO)
+// VCC (pin 2) connected to +3.3 V
+// Gnd (pin 1) connected to ground
 
 // Analog inputs
 // PE0 Ain3 sampled at 10Hz, sequencer 3, by DAS, using software start in ISR

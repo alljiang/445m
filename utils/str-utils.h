@@ -8,6 +8,11 @@
 #ifndef UTILS_STR_UTILS_H_
 #define UTILS_STR_UTILS_H_
 
+/*
+ * Changes a number of variable length to a character.
+ * Must pass in a char buffer that is long enough for
+ * the value.
+ */
 int
 itoa(int value,char *ptr);
 
