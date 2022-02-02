@@ -9,7 +9,6 @@
 #include <stdlib.h>
 #include <string.h> 
 #include <stdio.h>
-#include "str_utils.h"
 #include "vware/ADCT0ATrigger.h"
 #include "vware/ADCSWTrigger.h"
 #include "RTOS_Labs_common/OS.h"
@@ -19,6 +18,8 @@
 #include "RTOS_Labs_common/eDisk.h"
 #include "RTOS_Labs_common/eFile.h"
 
+#include <str-utils.h>
+#include <uart-utils.h>
 
 #define EQ(a, b) (strcmp((a), (b)) == 0)
 
@@ -112,8 +113,8 @@ Interpreter_Parse(char *buffer) {
         OS_ClearMsTime();
     } else if (EQ("1", token)) {
         // Test timer
-        UART_OutUDec((uint32_t)OS_MsTime());
-        UART_OutString("\r\n");
+        UART_OutUDecNonBlock((uint32_t) OS_MsTime());
+        UART_OutStringNonBlock("\r\n");
     } else if (EQ("2", token)) {
 
     } else if (EQ("3", token)) {
@@ -133,7 +134,7 @@ Interpreter_Parse(char *buffer) {
     } else if (EQ("lcd", token)) {
         uint8_t screen = get_next_token_as_int(&buffer);
         uint8_t row = get_next_token_as_int(&buffer);
-        char* str = get_next_token(&buffer);
+        char *str = get_next_token(&buffer);
         ST7735_Message(screen, row, str, 0);
     } else if (EQ("adc", token)) {
         char voltage_formatted_str[6];
@@ -143,8 +144,8 @@ Interpreter_Parse(char *buffer) {
         int fixed_pt = adc_voltage * 100;
         itoa(fixed_pt, itoa_buf);
 
-        for(int i = 0; i < 3; i++) {
-            if(itoa_buf[i] == 0 || itoa_buf[i] > '9' || itoa_buf[i] < '0') {
+        for (int i = 0; i < 3; i++) {
+            if (itoa_buf[i] == 0 || itoa_buf[i] > '9' || itoa_buf[i] < '0') {
                 voltage_formatted_str[i] = '0';
             } else {
                 voltage_formatted_str[i] = itoa_buf[i];
@@ -158,8 +159,8 @@ Interpreter_Parse(char *buffer) {
         voltage_formatted_str[4] = 'V';
         voltage_formatted_str[5] = 0;
 
-        UART_OutString(voltage_formatted_str);
-        UART_OutString("\r\n");
+        UART_OutStringNonBlock(voltage_formatted_str);
+        UART_OutStringNonBlock("\r\n");
     } else if (EQ("", token)) {
 
     } else if (EQ("", token)) {
@@ -170,7 +171,7 @@ Interpreter_Parse(char *buffer) {
 
     } else {
         // invalid command, print help info
-        UART_OutString((char*) help);
+        UART_OutStringNonBlock((char*) help);
     }
 }
 
@@ -183,16 +184,17 @@ Interpreter(void) {
     printedPrompt = false;
 
     while (1) {
-        if(!printedPrompt) {
-            UART_OutChar('>');
-            UART_OutChar(' ');
+        if (!printedPrompt) {
+            UART_OutCharNonBlock('>');
+            UART_OutCharNonBlock(' ');
             printedPrompt = true;
         }
-        input = UART_InChar();
-        UART_OutChar(input);
+        do {
+            input = UART_InCharNonBlock();
+        } while (input == 0);
+        UART_OutCharNonBlock(input);
 
-        if(input == '\r')
-            UART_OutChar('\n');
+        if (input == '\r') UART_OutCharNonBlock('\n');
 
         if (input != '\r' || buffer_index >= sizeof(buffer) - 1) {
             // still adding to buffer

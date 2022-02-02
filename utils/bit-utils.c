@@ -5,7 +5,7 @@
  *      Author: Allen
  */
 
-#include "bit_utils.h"
+#include <bit-utils.h>
 
 uint32_t
 set_bit_field_u32(uint32_t container, uint8_t fieldLSBIndex,

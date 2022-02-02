@@ -113,11 +113,11 @@
 
 #include <stdio.h>
 #include <stdint.h>
+#include <str-utils.h>
 #include "vware/tm4c123gh6pm.h"
 #include "../RTOS_Labs_common/ST7735.h"
 #include "../RTOS_Labs_common/OS.h"
 #include "../RTOS_Labs_common/eDisk.h"
-#include "str_utils.h"
 // these defines are in two places, here and in eDisk.c
 #define SDC_CS_PB0 1
 #define SDC_CS_PD7 0
@@ -1423,7 +1423,6 @@ void ST7735_Message(uint32_t  d, uint32_t  l, char *pt, int32_t value){
         pt++;
     }
     itoa(value, buffer + i);
-
 
     // First, draw the text
     ST7735_DrawString(0, line, buffer, 0xFFFF);
