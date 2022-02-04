@@ -34,6 +34,7 @@
 // MCP2551 Pin8 RS   ---- ground, Slope-Control Input (maximum slew rate)
 // 120 ohm across CANH, CANL on both ends of network
 #include <stdint.h>
+#include <RTOS/can0.h>
 #include "vware/tm4c123gh6pm.h"
 #include "vware/hw_can.h"
 #include "vware/hw_ints.h"
@@ -43,7 +44,6 @@
 #include "vware/cpu.h"
 #include "vware/debug.h"
 #include "vware/interrupt.h"
-#include "../RTOS_Labs_common/can0.h"
 
 // reverse these IDs on the other microcontroller
 

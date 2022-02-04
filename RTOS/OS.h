@@ -317,6 +317,11 @@ OS_MsTime(void);
 void
 OS_Launch(uint32_t theTimeSlice);
 
+// scheduler for the RTOS
+// no inputs, no outputs
+void
+OS_Scheduler();
+
 /**
  * @details open the file for writing, redirect stream I/O (printf) to this file
  * @note if the file exists it will append to the end<br>

@@ -52,10 +52,10 @@
 #include <stdlib.h>
 #include "vware/tm4c123gh6pm.h"
 #include "vware/CortexM.h"
-#include "../RTOS_Labs_common/FIFO.h"
-#include "../RTOS_Labs_common/UART0int.h"
-#include "../RTOS_Labs_common/esp8266.h"
-#include "../RTOS_Labs_common/WifiSettings.h"  // access point parameters
+#include <RTOS/esp8266.h>
+#include <RTOS/FIFO.h>
+#include <RTOS/UART0int.h>
+#include <RTOS/WifiSettings.h>  // access point parameters
 
 /*
 ===========================================================

@@ -1,7 +1,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "RTOS_Labs_common/UART0int.h"
+#include <RTOS/UART0int.h>
 
 /*
  * Outputs string to UART without blocking

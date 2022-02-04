@@ -4,10 +4,12 @@
 // Lab2 Part 1: Testmain1 and Testmain2
 // Lab2 Part 2: Testmain3, Testmain4, Testmain5, TestmainCS and realmain
 
-// Jonathan W. Valvano 1/29/20, valvano@mail.utexas.edu
-// EE445M/EE380L.12
-// You may use, edit, run or distribute this file 
-// You are free to change the syntax/organization of this file
+// Allen & Sophia Jiang
+// TA: Jeagun Jung
+// Lab 2
+// Created: 1/29/22
+// Last revision: 2/7/22
+// EE445M/EE380L.6
 
 // LED outputs to logic analyzer for use by OS profile
 // PF1 is preemptive thread switch
@@ -28,18 +30,18 @@
 // PE2 Ain1 sampled at 250Hz, sequencer 0, by Producer, timer tigger
 
 #include <stdint.h>
+#include <RTOS/ADC.h>
+#include <RTOS/Interpreter.h>
+#include <RTOS/OS.h>
+#include <RTOS/ST7735.h>
+#include <RTOS/UART0int.h>
 #include "vware/tm4c123gh6pm.h"
 #include "vware/CortexM.h"
 #include "vware/LaunchPad.h"
 #include "vware/PLL.h"
 #include "vware/LPF.h"
-#include "RTOS_Labs_common/UART0int.h"
-#include "RTOS_Labs_common/ADC.h"
 #include "vware/ADCT0ATrigger.h"
 #include "vware/IRDistance.h"
-#include "RTOS_Labs_common/OS.h"
-#include "RTOS_Labs_common/Interpreter.h"
-#include "RTOS_Labs_common/ST7735.h"
 
 //*********Prototype for FFT in cr4_fft_64_stm32.s, STMicroelectronics
 void

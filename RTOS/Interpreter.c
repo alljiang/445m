@@ -7,17 +7,16 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdlib.h>
-#include <string.h> 
+#include <string.h>
 #include <stdio.h>
+#include <RTOS/ADC.h>
+#include <RTOS/eDisk.h>
+#include <RTOS/eFile.h>
+#include <RTOS/OS.h>
+#include <RTOS/ST7735.h>
+#include <RTOS/UART0int.h>
 #include "vware/ADCT0ATrigger.h"
 #include "vware/ADCSWTrigger.h"
-#include "RTOS_Labs_common/OS.h"
-#include "RTOS_Labs_common/ADC.h"
-#include "RTOS_Labs_common/ST7735.h"
-#include "RTOS_Labs_common/UART0int.h"
-#include "RTOS_Labs_common/eDisk.h"
-#include "RTOS_Labs_common/eFile.h"
-
 #include <str-utils.h>
 #include <uart-utils.h>
 

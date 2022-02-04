@@ -30,11 +30,11 @@
 // U0Tx (VCP transmit) connected to PA1
 #include <stdint.h>
 #include <stdio.h>
+#include <RTOS/FIFO.h>
+#include <RTOS/UART0int.h>
 #include <string.h>
 #include "vware/tm4c123gh6pm.h"
 #include "vware/CortexM.h"
-#include "../RTOS_Labs_common/FIFO.h"
-#include "../RTOS_Labs_common/UART0int.h"
 
 #define NVIC_EN0_INT5           0x00000020  // Interrupt 5 enable
 

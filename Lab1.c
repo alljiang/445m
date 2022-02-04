@@ -39,6 +39,11 @@
 // PE0 Ain3 sampled at 10Hz, sequencer 3, by DAS, using software start in ISR
 
 #include <stdint.h>
+#include <RTOS/ADC.h>
+#include <RTOS/Interpreter.h>
+#include <RTOS/OS.h>
+#include <RTOS/ST7735.h>
+#include <RTOS/UART0int.h>
 #include "vware/tm4c123gh6pm.h"
 #include "vware/CortexM.h"
 #include "vware/LaunchPad.h"
@@ -46,12 +51,7 @@
 #include "vware/PLL.h"
 #include "vware/Timer4A.h"
 #include "vware/InterruptFunctions.h"
-#include "RTOS_Labs_common/UART0int.h"
 #include "vware/IRDistance.h"
-#include "RTOS_Labs_common/OS.h"
-#include "RTOS_Labs_common/ADC.h"
-#include "RTOS_Labs_common/Interpreter.h"
-#include "RTOS_Labs_common/ST7735.h"
 
 int32_t ADCdata, FilterOutput, Distance;
 uint32_t FilterWork;

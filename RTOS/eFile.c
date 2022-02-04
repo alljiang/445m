@@ -4,10 +4,10 @@
 // Jonathan W. Valvano 1/12/20
 #include <stdint.h>
 #include <string.h>
-#include "../RTOS_Labs_common/OS.h"
-#include "../RTOS_Labs_common/eDisk.h"
-#include "../RTOS_Labs_common/eFile.h"
 #include <stdio.h>
+#include <RTOS/eDisk.h>
+#include <RTOS/eFile.h>
+#include <RTOS/OS.h>
 
 
 //---------- eFile_Init-----------------

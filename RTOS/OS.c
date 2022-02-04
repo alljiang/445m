@@ -8,21 +8,21 @@
 
 #include <stdint.h>
 #include <stdio.h>
+#include <RTOS/eFile.h>
+#include <RTOS/OS.h>
+#include <RTOS/ST7735.h>
+#include <RTOS/UART0int.h>
 #include "vware/tm4c123gh6pm.h"
 #include "vware/CortexM.h"
 #include "vware/PLL.h"
 #include "vware/LaunchPad.h"
 #include "vware/Timer4A.h"
 #include "vware/WTimer0A.h"
-#include "RTOS_Labs_common/OS.h"
-#include "RTOS_Labs_common/ST7735.h"
 #include "vware/ADCT0ATrigger.h"
-#include "RTOS_Labs_common/UART0int.h"
-#include "RTOS_Labs_common/eFile.h"
-
 #include "timers.h"
 
-extern void StartOS(void);
+extern void
+StartOS(void);
 
 // Performance Measurements 
 int32_t MaxJitter;             // largest time jitter between interrupts in usec
@@ -45,11 +45,6 @@ int32_t stack[MAX_THREADS_COUNT][THREAD_STACK_SIZE];
  SysTick interrupt happens every 10 ms
  used for preemptive thread switch
  *------------------------------------------------------------------------------*/
-void
-SysTick_Handler(void) {
-
-} // end SysTick_Handler
-
 unsigned long
 OS_LockScheduler(void) {
     // lab 4 might need this for disk formating
@@ -58,11 +53,6 @@ OS_LockScheduler(void) {
 void
 OS_UnLockScheduler(unsigned long previous) {
     // lab 4 might need this for disk formating
-}
-
-void
-SysTick_Init(unsigned long period) {
-
 }
 
 /**
@@ -159,8 +149,8 @@ OS_AddThread(void
 (*task)(void), uint32_t stackSize, uint32_t priority) {
     // put Lab 2 (and beyond) solution here
     int rv = 1;
-    int list_index = -1;
-    TCBPtr tcb_ptr = NULL;
+    int listIndex = -1;
+    TCBPtr tcbPtr = NULL;
 
     if (task == NULL) {
         // task is invalid
@@ -177,13 +167,13 @@ OS_AddThread(void
     // search for a dead TCB to recycle (find the first occurrence of id == -1)
     for (int i = 0; i < MAX_THREADS_COUNT; i++) {
         if (tcb_list[i].id == -1) {
-            list_index = i;
-            tcb_ptr = &tcb_list[i];
+            listIndex = i;
+            tcbPtr = &tcb_list[i];
             break;
         }
     }
 
-    if (tcb_ptr == NULL) {
+    if (tcbPtr == NULL) {
         // no dead TCBs available, too many active threads
         // increase MAX_THREADS_COUNT
         rv = 0;
@@ -191,27 +181,27 @@ OS_AddThread(void
     }
 
     // populate TCB entry
-    tcb_ptr->id = id_counter++;         // id is unique, monotonically generated
-    tcb_ptr->stack_pointer = (uintptr_t) stack[list_index][THREAD_STACK_SIZE
+    tcbPtr->id = id_counter++;         // id is unique, monotonically generated
+    tcbPtr->stack_pointer = (uintptr_t) stack[listIndex][THREAD_STACK_SIZE
             - 16];
 
     // initialize this newly generated task's stack
-    stack[list_index][THREAD_STACK_SIZE - 1] = 0;                   // PSR
-    stack[list_index][THREAD_STACK_SIZE - 2] = (int32_t) task;      // PC
-    stack[list_index][THREAD_STACK_SIZE - 3] = 0;                   // R14/LR
-    stack[list_index][THREAD_STACK_SIZE - 4] = 0;                   // R12
-    stack[list_index][THREAD_STACK_SIZE - 5] = 0;                   // R3
-    stack[list_index][THREAD_STACK_SIZE - 6] = 0;                   // R2
-    stack[list_index][THREAD_STACK_SIZE - 7] = 0;                   // R1
-    stack[list_index][THREAD_STACK_SIZE - 8] = 0;                   // R0
-    stack[list_index][THREAD_STACK_SIZE - 9] = 0;                   // R11
-    stack[list_index][THREAD_STACK_SIZE - 10] = 0;                  // R10
-    stack[list_index][THREAD_STACK_SIZE - 11] = 0;                  // R9
-    stack[list_index][THREAD_STACK_SIZE - 12] = 0;                  // R8
-    stack[list_index][THREAD_STACK_SIZE - 13] = 0;                  // R7
-    stack[list_index][THREAD_STACK_SIZE - 14] = 0;                  // R6
-    stack[list_index][THREAD_STACK_SIZE - 15] = 0;                  // R5
-    stack[list_index][THREAD_STACK_SIZE - 16] = 0;                  // R4
+    stack[listIndex][THREAD_STACK_SIZE - 1] = 0x12341234;                // PSR
+    stack[listIndex][THREAD_STACK_SIZE - 2] = (int32_t) task;             // PC
+    stack[listIndex][THREAD_STACK_SIZE - 3] = 0x14141414;             // R14/LR
+    stack[listIndex][THREAD_STACK_SIZE - 4] = 0x12121212;                // R12
+    stack[listIndex][THREAD_STACK_SIZE - 5] = 0x03030303;                 // R3
+    stack[listIndex][THREAD_STACK_SIZE - 6] = 0x02020202;                 // R2
+    stack[listIndex][THREAD_STACK_SIZE - 7] = 0x01010101;                 // R1
+    stack[listIndex][THREAD_STACK_SIZE - 8] = 0x00000000;                 // R0
+    stack[listIndex][THREAD_STACK_SIZE - 9] = 0x11001100;                // R11
+    stack[listIndex][THREAD_STACK_SIZE - 10] = 0x10001000;               // R10
+    stack[listIndex][THREAD_STACK_SIZE - 11] = 0x09090909;                // R9
+    stack[listIndex][THREAD_STACK_SIZE - 12] = 0x08080808;                // R8
+    stack[listIndex][THREAD_STACK_SIZE - 13] = 0x07070707;                // R7
+    stack[listIndex][THREAD_STACK_SIZE - 14] = 0x06060606;                // R6
+    stack[listIndex][THREAD_STACK_SIZE - 15] = 0x05050505;                // R5
+    stack[listIndex][THREAD_STACK_SIZE - 16] = 0x04040404;                // R4
 
 exit:
     return rv; // replace this line with solution
@@ -365,7 +355,8 @@ OS_Kill(void) {
 void
 OS_Suspend(void) {
     // put Lab 2 (and beyond) solution here
-
+    NVIC_ST_CURRENT_R = 0;          // clear timer
+    NVIC_INT_CTRL_R = 0x04000000;   // trigger SysTick Handler
 }
 ;
 
@@ -537,9 +528,13 @@ OS_MsTime(void) {
 void
 OS_Launch(uint32_t theTimeSlice) {
     // put Lab 2 (and beyond) solution here
+    SysTick_Init(theTimeSlice);
     StartOS();
 }
-;
+
+void OS_Scheduler() {
+
+}
 
 //************** I/O Redirection *************** 
 // redirect terminal I/O to UART or file (Lab 4)

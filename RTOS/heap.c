@@ -27,7 +27,7 @@
 
 
 #include <stdint.h>
-#include "../RTOS_Labs_common/heap.h"
+#include <RTOS/heap.h>
 
 
 //******** Heap_Init *************** 
