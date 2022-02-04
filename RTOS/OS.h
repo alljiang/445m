@@ -108,6 +108,11 @@ int
 OS_AddThread(void
 (*task)(void), uint32_t stackSize, uint32_t priority);
 
+// OS_UpdateSleep
+// Decrements sleep timer for all sleeping threads
+void
+OS_UpdateSleep(void);
+
 //******** OS_Id *************** 
 // returns the thread ID for the currently running thread
 // Inputs: none

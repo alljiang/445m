@@ -27,6 +27,7 @@
 
 extern void Timer4A_Handler(void);
 extern void UART0_Handler(void);
+extern void PendSV_Handler(void);
 
 //*****************************************************************************
 //
@@ -85,8 +86,8 @@ void (* const g_pfnVectors[])(void) =
     IntDefaultHandler,                      // SVCall handler
     IntDefaultHandler,                      // Debug monitor handler
     0,                                      // Reserved
-    IntDefaultHandler,                      // The PendSV handler
-    SysTick_Init,                           // The SysTick handler
+    PendSV_Handler,                         // The PendSV handler
+    SysTick_Handler,                        // The SysTick handler
     IntDefaultHandler,                      // GPIO Port A
     IntDefaultHandler,                      // GPIO Port B
     IntDefaultHandler,                      // GPIO Port C

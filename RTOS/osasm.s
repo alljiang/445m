@@ -12,9 +12,20 @@
         					;PRESERVE8
 
         .ref RunPt			;EXTERN  RunPt            ; currently running thread
+        .ref NextRunPt
 		.align 4
 RunPt_Pt
 		.field RunPt, 32
+
+NextRunPt_Pt
+		.field NextRunPt, 32
+
+NVIC_INT_CTRL_R_ADDR
+		.field 0xE000ED04
+
+NVIC_INT_CTRL_PEND_SV
+		.field 0x10000000
+
         .align 2
 
         .def StartOS		;EXPORT  StartOS
@@ -90,6 +101,12 @@ OSStartHang
 
 ContextSwitch
 ; edit this code
+
+;    NVIC_INT_CTRL_R = NVIC_INT_CTRL_PEND_SV;   // Trigger PendSV
+	LDR R0, NVIC_INT_CTRL_R_ADDR
+	LDR R1, NVIC_INT_CTRL_PEND_SV
+	STR R1, [R0]
+
     
     BX      LR
 	.endasmfunc
@@ -132,10 +149,29 @@ ContextSwitch
 
 PendSV_Handler
 ; put your code here
+    CPSID   I					; Start Critical Section
 
+    PUSH {R4-R11}				; b) Save regs on process stack. Core has already pushed other regs to stack
+
+	; c) save SP in TCB
+    LDR R0, RunPt_Pt			; R0 <- Pointer to RunPt
+    LDR R2, [R0]				; R2 <- RunPt
+    STR SP, [R2, #0]			; RunPt.stack_pointer <- SP
+
+	; f) get current ready thread TCB
+    LDR R1, NextRunPt_Pt		; R1 <- Pointer to NextRunPt
+    LDR R1, [R1]				; R1 <- NextRunPt
+	STR R1, [R0]				; RunPt <- NextRunPt
+
+	; g) get new SP
+	LDR SP, [R1, #0]			; SP <- NextRunPt.stack_pointer
+
+	; h) restore registers
+	POP {R4-R11}
+
+    CPSIE   I					; End Critical Section
     
-    
-    BX      LR                 ; Exception return will restore remaining context   
+    BX      LR                 	; Exception return will restore remaining context
 	.endasmfunc
     
 

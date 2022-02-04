@@ -1,10 +1,21 @@
+/*
+ * InterruptFunctions.h
+ *
+ *  Created on: Feb 3, 2022
+ *      Author: Allen
+ */
 
-void DisableInterrupts(void);
+#ifndef RTOS_INTERRUPTFUNCTIONS_H_
+#define RTOS_INTERRUPTFUNCTIONS_H_
 
-void EnableInterrupts(void);
+extern void DisableInterrupts(void);
 
-long StartCritical (void);
+extern void EnableInterrupts(void);
 
-void EndCritical(long sr);
+extern long StartCritical (void);
 
-void WaitForInterrupt(void);
+extern void EndCritical(long sr);
+
+extern void WaitForInterrupt(void);
+
+#endif /* RTOS_INTERRUPTFUNCTIONS_H_ */

@@ -19,6 +19,8 @@
 #include "vware/Timer4A.h"
 #include "vware/WTimer0A.h"
 #include "vware/ADCT0ATrigger.h"
+#include "vware/InterruptFunctions.h"
+#include "bit-utils.h"
 #include "timers.h"
 
 extern void
@@ -37,6 +39,9 @@ int id_counter = 0;
 #define THREAD_STACK_SIZE 100
 TCB_t tcb_list[MAX_THREADS_COUNT];
 TCBPtr RunPt;
+TCBPtr NextRunPt;
+
+int16_t threadCount;
 
 int32_t stack[MAX_THREADS_COUNT][THREAD_STACK_SIZE];
 
@@ -71,8 +76,12 @@ OS_Init(void) {
     for (int i = 0; i < MAX_THREADS_COUNT; i++) {
         tcb_list[i].id = -1;
     }
+
+    threadCount = 0;
+
+    // Set PendSV priority
+    NVIC_SYS_PRI3_R = set_bit_field_u32(NVIC_SYS_PRI3_R, 24, 8, 0xD0); // priority 6
 }
-;
 
 // ******** OS_InitSemaphore ************
 // initialize semaphore 
@@ -83,7 +92,6 @@ OS_InitSemaphore(Sema4Type *semaPt, int32_t value) {
     // put Lab 2 (and beyond) solution here
 
 }
-;
 
 // ******** OS_Wait ************
 // decrement semaphore 
@@ -152,6 +160,9 @@ OS_AddThread(void
     int listIndex = -1;
     TCBPtr tcbPtr = NULL;
 
+    // CRITICAL AREA
+    uint32_t sr = StartCritical();
+
     if (task == NULL) {
         // task is invalid
         rv = 0;
@@ -182,11 +193,13 @@ OS_AddThread(void
 
     // populate TCB entry
     tcbPtr->id = id_counter++;         // id is unique, monotonically generated
-    tcbPtr->stack_pointer = (uintptr_t) stack[listIndex][THREAD_STACK_SIZE
-            - 16];
+    tcbPtr->stack_pointer =
+            (uintptr_t) &stack[listIndex][THREAD_STACK_SIZE - 16];
+    tcbPtr->sleep_state = 0;
+    tcbPtr->blocked_state = 0; // ???? TODO
 
     // initialize this newly generated task's stack
-    stack[listIndex][THREAD_STACK_SIZE - 1] = 0x12341234;                // PSR
+    stack[listIndex][THREAD_STACK_SIZE - 1] = 0x01000000;                // PSR
     stack[listIndex][THREAD_STACK_SIZE - 2] = (int32_t) task;             // PC
     stack[listIndex][THREAD_STACK_SIZE - 3] = 0x14141414;             // R14/LR
     stack[listIndex][THREAD_STACK_SIZE - 4] = 0x12121212;                // R12
@@ -203,8 +216,38 @@ OS_AddThread(void
     stack[listIndex][THREAD_STACK_SIZE - 15] = 0x05050505;                // R5
     stack[listIndex][THREAD_STACK_SIZE - 16] = 0x04040404;                // R4
 
+    threadCount++;
+    if (threadCount == 1) {
+        // first thread, set RunPt
+        RunPt = tcbPtr;
+    } else {
+        // set existing RunPt to point to this next thread and then update RunPt
+        RunPt->TCB_next = tcbPtr;
+        tcbPtr->TCB_previous = RunPt;
+
+        RunPt = tcbPtr;
+    }
+
 exit:
+    EndCritical(sr);
     return rv; // replace this line with solution
+}
+
+void
+OS_UpdateSleep(void) {
+    int tcbIndex;
+
+    for (tcbIndex = 0; tcbIndex < MAX_THREADS_COUNT; tcbIndex++) {
+        TCBPtr tcbPtr = &tcb_list[tcbIndex];
+        if (tcbPtr->sleep_state > 0) {
+            tcbPtr->sleep_state--;
+
+            // Check if just finished sleeping
+            if (tcbPtr->sleep_state == 0) {
+                //TODO
+            }
+        }
+    }
 }
 
 //******** OS_AddProcess *************** 
@@ -326,9 +369,14 @@ OS_AddSW2Task(void
 void
 OS_Sleep(uint32_t sleepTime) {
     // put Lab 2 (and beyond) solution here
+    DisableInterrupts();
 
+    RunPt->sleep_state = sleepTime;
+
+    OS_Suspend();
+
+    EnableInterrupts();
 }
-;
 
 // ******** OS_Kill ************
 // kill the currently running thread, release its TCB and stack
@@ -528,12 +576,43 @@ OS_MsTime(void) {
 void
 OS_Launch(uint32_t theTimeSlice) {
     // put Lab 2 (and beyond) solution here
+
+    // There must be at least one task to run
+    if (threadCount == 0) {
+        goto exit;
+    }
+
+    // lab 2 lab 2 lab 2 lab 2 lab 2 lab 2 lab 2 lab 2 lab 2 lab 2 lab 2 lab 2 lab 2 lab 2 lab 2
+
+    // Currently, RunPt is pointing to the last entry into the tcb. Link it
+    // to the first entry in the tcb to make a connected circle.
+    RunPt->TCB_next = &tcb_list[0];
+    tcb_list[0].TCB_previous = RunPt;
+
+    // Set RunPt to start the very first entry
+    RunPt = &tcb_list[0];
+
+    // lab 2 lab 2 lab 2 lab 2 lab 2 lab 2 lab 2 lab 2 lab 2 lab 2 lab 2 lab 2 lab 2 lab 2 lab 2
+
+    // For priority, look through the tcbs to find the highest priority
+    // before running here. RunPt will point to the most recently
+    // added thread.
+
     SysTick_Init(theTimeSlice);
     StartOS();
+
+exit:
+    return;
 }
 
-void OS_Scheduler() {
+void
+OS_Scheduler(void) {
+    NextRunPt = RunPt->TCB_next;
 
+    // Cannot run a sleeping thread, find a thread that is awake
+    while (NextRunPt->sleep_state > 0) {
+        NextRunPt = NextRunPt->TCB_next;
+    }
 }
 
 //************** I/O Redirection *************** 

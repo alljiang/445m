@@ -6,11 +6,13 @@
 
 extern uint64_t osTimeMs;
 
+extern void
+ContextSwitch(void);
+
 void
 SysTick_Init(unsigned long period) {
     NVIC_ST_CTRL_R = 0;                                                 // disable SysTick
     NVIC_ST_CURRENT_R = 0;                                              // clear current counter
-    NVIC_SYS_PRI3_R = set_bit_field_u32(NVIC_SYS_PRI3_R, 24, 8, 0xD0);  // priority 6
     NVIC_SYS_PRI3_R = set_bit_field_u32(NVIC_SYS_PRI3_R, 16, 8, 0xE0);  // priority 7
     NVIC_ST_RELOAD_R = period - 1;                                      // reload value
     NVIC_ST_CTRL_R = 0x00000007;                                        // enable, core clock and interrupt arm
@@ -19,6 +21,7 @@ SysTick_Init(unsigned long period) {
 void
 SysTick_Handler() {
     OS_Scheduler();
+    ContextSwitch();
 }
 
 void
@@ -36,7 +39,6 @@ Timer0Init(void) {
     NVIC_PRI4_R = set_bit_field_u32(NVIC_PRI4_R, 29, 8, 1);
     NVIC_EN0_R = set_bit_field_u32(NVIC_EN0_R, 19, 1, 1);
     TIMER0_CTL_R = set_bit_field_u32(TIMER0_CTL_R, 0, 1, 1);            //  7) Enable timer and start counting
-
 }
 
 //  1000 Hz Handler
@@ -46,4 +48,6 @@ Timer0IntHandler(void) {
     TIMER0_ICR_R = set_bit_field_u32(TIMER0_ICR_R, 0, 1, 0b1); //  8) Clear interrupt
 
     osTimeMs++;
+
+    OS_UpdateSleep();
 }

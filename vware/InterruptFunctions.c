@@ -1,4 +1,6 @@
 
+#include "InterruptFunctions.h"
+
 void DisableInterrupts(void) {
     asm("        CPSID  I");
 }
@@ -10,6 +12,8 @@ void EnableInterrupts(void) {
 long StartCritical (void) {
     asm("        MRS    R0, PRIMASK");
     asm("        CPSID  I");
+    asm("        BX  LR");
+    return -1;  // should not reach here
 }
 
 void EndCritical(long sr) {
