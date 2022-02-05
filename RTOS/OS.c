@@ -81,6 +81,9 @@ OS_Init(void) {
 
     // Set PendSV priority
     NVIC_SYS_PRI3_R = set_bit_field_u32(NVIC_SYS_PRI3_R, 24, 8, 0xD0); // priority 6
+
+    // Start 1ms periodic timer
+    Timer0Init();
 }
 
 // ******** OS_InitSemaphore ************
@@ -158,6 +161,7 @@ OS_AddThread(void
     // put Lab 2 (and beyond) solution here
     int rv = 1;
     int listIndex = -1;
+    TCBPtr lastTCB;
     TCBPtr tcbPtr = NULL;
 
     // CRITICAL AREA
@@ -220,12 +224,20 @@ OS_AddThread(void
     if (threadCount == 1) {
         // first thread, set RunPt
         RunPt = tcbPtr;
+        RunPt->TCB_next = RunPt;
+        RunPt->TCB_previous = RunPt;
     } else {
-        // set existing RunPt to point to this next thread and then update RunPt
-        RunPt->TCB_next = tcbPtr;
-        tcbPtr->TCB_previous = RunPt;
+        // starting from RunPt, search for the last TCB in line
+        lastTCB = RunPt;
+        while (lastTCB->TCB_next != RunPt) {
+            lastTCB = lastTCB->TCB_next;
+        }
 
-        RunPt = tcbPtr;
+        // insert the new TCB behind lastTCB and in front of RunPt
+        lastTCB->TCB_next = tcbPtr;
+        tcbPtr->TCB_previous = lastTCB;
+        tcbPtr->TCB_next = RunPt;
+        RunPt->TCB_previous = tcbPtr;
     }
 
 exit:
@@ -386,9 +398,15 @@ void
 OS_Kill(void) {
     // put Lab 2 (and beyond) solution here
 
-    EnableInterrupts();   // end of atomic section
-    for (;;) {
-    };        // can not return
+    // Remove RunPt from TCB Chain
+    RunPt->TCB_previous->TCB_next = RunPt->TCB_next;
+    RunPt->TCB_next->TCB_previous = RunPt->TCB_previous;
+
+    // Deactivate RunPt's ID to indicate death
+    RunPt->id = -1;
+
+    OS_Suspend();
+//    EnableInterrupts();   // end of atomic section
 
 }
 ;
@@ -582,21 +600,7 @@ OS_Launch(uint32_t theTimeSlice) {
         goto exit;
     }
 
-    // lab 2 lab 2 lab 2 lab 2 lab 2 lab 2 lab 2 lab 2 lab 2 lab 2 lab 2 lab 2 lab 2 lab 2 lab 2
-
-    // Currently, RunPt is pointing to the last entry into the tcb. Link it
-    // to the first entry in the tcb to make a connected circle.
-    RunPt->TCB_next = &tcb_list[0];
-    tcb_list[0].TCB_previous = RunPt;
-
-    // Set RunPt to start the very first entry
-    RunPt = &tcb_list[0];
-
-    // lab 2 lab 2 lab 2 lab 2 lab 2 lab 2 lab 2 lab 2 lab 2 lab 2 lab 2 lab 2 lab 2 lab 2 lab 2
-
-    // For priority, look through the tcbs to find the highest priority
-    // before running here. RunPt will point to the most recently
-    // added thread.
+    // TODO Set RunPt to point to highest priority
 
     SysTick_Init(theTimeSlice);
     StartOS();
@@ -607,6 +611,7 @@ exit:
 
 void
 OS_Scheduler(void) {
+    // TODO Set NextRunPt to point to highest priority
     NextRunPt = RunPt->TCB_next;
 
     // Cannot run a sleeping thread, find a thread that is awake

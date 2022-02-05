@@ -718,5 +718,5 @@ TestmainFIFO(void) {   // TestmainFIFO
 int
 main(void) { 			// main
 //    realmain();
-    Testmain1();
+    Testmain3();
 }
