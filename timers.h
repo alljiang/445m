@@ -1,13 +1,19 @@
 #include <stdint.h>
 
-void
+extern void
 SysTick_Init(unsigned long period);
 
-void
+extern void
 SysTick_Handler();
 
-void
+extern void
 Timer0Init(void);
 
-void
+extern void
 Timer0IntHandler(void);
+
+extern void
+Timer1Init(uint32_t period, uint32_t priority);
+
+extern void
+Timer1IntHandler(void);

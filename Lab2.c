@@ -570,7 +570,7 @@ Testmain4(void) {   // Testmain4
     return 0;            // this never executes
 }
 
-//*******************Fith TEST**********
+//*******************Fifth TEST**********
 // Once the fourth test runs, run this example (Lab 2 part 2)
 // no UART interrupts
 // SYSTICK interrupts, with or without period established by OS_Launch
@@ -718,5 +718,5 @@ TestmainFIFO(void) {   // TestmainFIFO
 int
 main(void) { 			// main
 //    realmain();
-    Testmain3();
+    Testmain4();
 }

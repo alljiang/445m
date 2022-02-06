@@ -26,6 +26,9 @@
 extern void
 StartOS(void);
 
+void
+(*PeriodicTask)(void);
+
 // Performance Measurements 
 int32_t MaxJitter;             // largest time jitter between interrupts in usec
 #define JITTERSIZE 64
@@ -93,7 +96,9 @@ OS_Init(void) {
 void
 OS_InitSemaphore(Sema4Type *semaPt, int32_t value) {
     // put Lab 2 (and beyond) solution here
-
+    uint32_t sr = StartCritical();
+    semaPt->Value = value;
+    EndCritical(sr);
 }
 
 // ******** OS_Wait ************
@@ -105,9 +110,18 @@ OS_InitSemaphore(Sema4Type *semaPt, int32_t value) {
 void
 OS_Wait(Sema4Type *semaPt) {
     // put Lab 2 (and beyond) solution here
+    int32_t sr = StartCritical();
 
+    while(semaPt->Value <= 0) {
+        EndCritical(sr);
+        OS_Suspend();
+        sr = StartCritical();
+    }
+
+    semaPt->Value--;
+
+    EndCritical(sr);
 }
-;
 
 // ******** OS_Signal ************
 // increment semaphore 
@@ -118,9 +132,12 @@ OS_Wait(Sema4Type *semaPt) {
 void
 OS_Signal(Sema4Type *semaPt) {
     // put Lab 2 (and beyond) solution here
+    int32_t sr = StartCritical();
 
+    semaPt->Value++;
+
+    EndCritical(sr);
 }
-;
 
 // ******** OS_bWait ************
 // Lab2 spinlock, set to 0
@@ -130,9 +147,18 @@ OS_Signal(Sema4Type *semaPt) {
 void
 OS_bWait(Sema4Type *semaPt) {
     // put Lab 2 (and beyond) solution here
+    int32_t sr = StartCritical();
 
+    while(semaPt->Value == 0) {
+        EndCritical(sr);
+        OS_Suspend();
+        sr = StartCritical();
+    }
+
+    semaPt->Value = 0;
+
+    EndCritical(sr);
 }
-;
 
 // ******** OS_bSignal ************
 // Lab2 spinlock, set to 1
@@ -142,9 +168,12 @@ OS_bWait(Sema4Type *semaPt) {
 void
 OS_bSignal(Sema4Type *semaPt) {
     // put Lab 2 (and beyond) solution here
+    int32_t sr = StartCritical();
 
+    semaPt->Value = 1;
+
+    EndCritical(sr);
 }
-;
 
 //******** OS_AddThread *************** 
 // add a foreground thread to the scheduler
@@ -164,7 +193,7 @@ OS_AddThread(void
     TCBPtr lastTCB;
     TCBPtr tcbPtr = NULL;
 
-    // CRITICAL AREA
+    // CRITICAL SECTION
     uint32_t sr = StartCritical();
 
     if (task == NULL) {
@@ -289,7 +318,7 @@ uint32_t
 OS_Id(void) {
     // put Lab 2 (and beyond) solution here
 
-    return 0; // replace this line with solution
+    return RunPt->id;
 }
 ;
 
@@ -315,8 +344,15 @@ int
 OS_AddPeriodicThread(void
 (*task)(void), uint32_t period, uint32_t priority) {
     // put Lab 2 (and beyond) solution here
+    uint32_t sr = StartCritical();
+    int rv = 1;
 
-    return 0; // replace this line with solution
+    PeriodicTask = task;
+
+    Timer1Init(period, priority);
+
+    EndCritical(sr);
+    return rv; // replace this line with solution
 }
 ;
 
