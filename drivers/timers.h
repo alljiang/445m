@@ -1,3 +1,7 @@
+
+#ifndef TIMERS_H_
+#define TIMERS_H_
+
 #include <stdint.h>
 
 extern void
@@ -17,3 +21,5 @@ Timer1Init(uint32_t period, uint32_t priority);
 
 extern void
 Timer1IntHandler(void);
+
+#endif

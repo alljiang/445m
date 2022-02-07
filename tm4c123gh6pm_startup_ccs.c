@@ -23,6 +23,8 @@
 //*****************************************************************************
 
 #include <stdint.h>
+
+#include "gpio.h"
 #include "timers.h"
 
 extern void Timer4A_Handler(void);
@@ -88,11 +90,11 @@ void (* const g_pfnVectors[])(void) =
     0,                                      // Reserved
     PendSV_Handler,                         // The PendSV handler
     SysTick_Handler,                        // The SysTick handler
-    IntDefaultHandler,                      // GPIO Port A
-    IntDefaultHandler,                      // GPIO Port B
-    IntDefaultHandler,                      // GPIO Port C
-    IntDefaultHandler,                      // GPIO Port D
-    IntDefaultHandler,                      // GPIO Port E
+    GPIO_PortAHandler,                      // GPIO Port A
+    GPIO_PortBHandler,                      // GPIO Port B
+    GPIO_PortCHandler,                      // GPIO Port C
+    GPIO_PortDHandler,                      // GPIO Port D
+    GPIO_PortEHandler,                      // GPIO Port E
     UART0_Handler,                          // UART0 Rx and Tx
     IntDefaultHandler,                      // UART1 Rx and Tx
     IntDefaultHandler,                      // SSI0 Rx and Tx
@@ -118,7 +120,7 @@ void (* const g_pfnVectors[])(void) =
     IntDefaultHandler,                      // Analog Comparator 2
     IntDefaultHandler,                      // System Control (PLL, OSC, BO)
     IntDefaultHandler,                      // FLASH Control
-    IntDefaultHandler,                      // GPIO Port F
+    GPIO_PortFHandler,                      // GPIO Port F
     IntDefaultHandler,                      // GPIO Port G
     IntDefaultHandler,                      // GPIO Port H
     IntDefaultHandler,                      // UART2 Rx and Tx

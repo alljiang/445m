@@ -43,6 +43,8 @@
 #include "vware/ADCT0ATrigger.h"
 #include "vware/IRDistance.h"
 
+#include "gpio.h"
+
 //*********Prototype for FFT in cr4_fft_64_stm32.s, STMicroelectronics
 void
 cr4_fft_64_stm32(void *pssOUT, void *pssIN, unsigned short Nbin);
@@ -717,6 +719,8 @@ TestmainFIFO(void) {   // TestmainFIFO
 //*******************Trampoline for selecting main to execute**********
 int
 main(void) { 			// main
-//    realmain();
+    GPIO_Initialize();
+
     Testmain4();
+    //    realmain();
 }

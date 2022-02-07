@@ -7,6 +7,7 @@
 // Jan 12, 2020, valvano@mail.utexas.edu
 
 #include <stdint.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <RTOS/eFile.h>
 #include <RTOS/OS.h>
@@ -21,7 +22,10 @@
 #include "vware/ADCT0ATrigger.h"
 #include "vware/InterruptFunctions.h"
 #include "bit-utils.h"
+#include "gpio.h"
 #include "timers.h"
+
+#define LAUNCHPAD_BUTTON_DEBOUNCE_MS 10u
 
 extern void
 StartOS(void);
@@ -112,7 +116,7 @@ OS_Wait(Sema4Type *semaPt) {
     // put Lab 2 (and beyond) solution here
     int32_t sr = StartCritical();
 
-    while(semaPt->Value <= 0) {
+    while (semaPt->Value <= 0) {
         EndCritical(sr);
         OS_Suspend();
         sr = StartCritical();
@@ -149,7 +153,7 @@ OS_bWait(Sema4Type *semaPt) {
     // put Lab 2 (and beyond) solution here
     int32_t sr = StartCritical();
 
-    while(semaPt->Value == 0) {
+    while (semaPt->Value == 0) {
         EndCritical(sr);
         OS_Suspend();
         sr = StartCritical();
@@ -360,8 +364,37 @@ OS_AddPeriodicThread(void
  PF1 Interrupt Handler
  *----------------------------------------------------------------------------*/
 void
+(*SW1Task)(void);
+void
+(*SW2Task)(void);
+uint8_t SW1Task_Priority, SW2Task_Priority;
+uint32_t lastPF0EdgeInterrupt = 0, lastPF4EdgeInterrupt = 0;
+void
 GPIOPortF_Handler(void) {
+    uint32_t ms = OS_MsTime();
+    if (GPIO_PORTF_RIS_R & (1u << 0u)) {
+        // PF0
+        GPIO_ClearInterruptStatus(PORT_F, 0);
+        if (ms - lastPF0EdgeInterrupt > LAUNCHPAD_BUTTON_DEBOUNCE_MS) {
+            lastPF0EdgeInterrupt = ms;
 
+            if (SW2Task != NULL) {
+//                OS_AddThread(SW2Task, 128, SW2Task_Priority);
+                (*SW2Task)();
+            }
+        }
+    } else if (GPIO_PORTF_RIS_R & (1u << 4u)) {
+        // PF4
+        GPIO_ClearInterruptStatus(PORT_F, 4);
+        if (ms - lastPF4EdgeInterrupt > LAUNCHPAD_BUTTON_DEBOUNCE_MS) {
+            lastPF4EdgeInterrupt = ms;
+
+            if (SW1Task != NULL) {
+//                OS_AddThread(SW1Task, 128, SW2Task_Priority);
+                (*SW1Task)();
+            }
+        }
+    }
 }
 
 //******** OS_AddSW1Task *************** 
@@ -381,10 +414,11 @@ int
 OS_AddSW1Task(void
 (*task)(void), uint32_t priority) {
     // put Lab 2 (and beyond) solution here
-
+    SW1Task = task;
+    SW1Task_Priority = priority;
+    GPIO_EnableEdgeInterrupt(PORT_F, 4, FALLING_EDGE);
     return 0; // replace this line with solution
 }
-;
 
 //******** OS_AddSW2Task *************** 
 // add a background task to run whenever the SW2 (PF0) button is pushed
@@ -403,10 +437,11 @@ int
 OS_AddSW2Task(void
 (*task)(void), uint32_t priority) {
     // put Lab 2 (and beyond) solution here
-
+    SW2Task = task;
+    SW2Task_Priority = priority;
+    GPIO_EnableEdgeInterrupt(PORT_F, 0, FALLING_EDGE);
     return 0; // replace this line with solution
 }
-;
 
 // ******** OS_Sleep ************
 // place this thread into a dormant state
