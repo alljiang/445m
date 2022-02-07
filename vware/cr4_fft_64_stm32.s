@@ -175,15 +175,15 @@ BUTFLY4ZERO_OPT  .macro pIN, offset, pOUT       		;		MACRO
 BUTFLY4_V7 .macro pssDin, offset, pssDout, qformat, pssK    ;		MACRO
         												;		BUTFLY4_V7   $pssDin,$offset,$pssDout,$qformat,$pssK
         LDR2Qm   R4,R5, pssDin, offset			        ;        LDR2Qm   Ar,Ai,$pssDin, $offset;-$offset
-        LDR2Q    R10,R11, pssK, #4                        ;        LDR2Q    Dr,Di,$pssK, #4
+        LDR2Q    R10,R11, pssK, #4                      ;        LDR2Q    Dr,Di,$pssK, #4
         ; format CXMUL_V7 YYr, YYi, Yr, Yi, Kr, Ki,tmp,tmp2
-        CXMUL_V7 R10,R11,R4,R5,R10,R11,tmp,tmp2             ;        CXMUL_V7 Dr,Di,Ar,Ai,Dr,Di,tmp,tmp2
+        CXMUL_V7 R10,R11,R4,R5,R10,R11,R12,R14          ;        CXMUL_V7 Dr,Di,Ar,Ai,Dr,Di,tmp,tmp2
         LDR2Qm   R4,R5, pssDin, offset			        ;        LDR2Qm   Ar,Ai,$pssDin,$offset;-$offset
         LDR2Q    R8,R9,pssK,#4	                 		;        LDR2Q    Cr,Ci,$pssK,#4
-        CXMUL_V7 R8,R9,R4,R5,R8,R9,tmp,tmp2             ;        CXMUL_V7 Cr,Ci,Ar,Ai,Cr,Ci,tmp,tmp2
+        CXMUL_V7 R8,R9,R4,R5,R8,R9,R12,R14				;        CXMUL_V7 Cr,Ci,Ar,Ai,Cr,Ci,tmp,tmp2
         LDR2Qm    R4,R5, pssDin, offset;				;        LDR2Qm    Ar,Ai, $pssDin, $offset;-$offset
         LDR2Q    R6,R7, pssK, #4                        ;        LDR2Q    Br,Bi, $pssK, #4
-        CXMUL_V7  R6,R7,R4,R5,R6,R7,tmp,tmp2            ;        CXMUL_V7  Br,Bi,Ar,Ai,Br,Bi,tmp,tmp2
+        CXMUL_V7  R6,R7,R4,R5,R6,R7,R12,R14				;        CXMUL_V7  Br,Bi,Ar,Ai,Br,Bi,tmp,tmp2
         LDR2Q    R4,R5, pssDin, #0                      ;        LDR2Q    Ar,Ai, $pssDin, #0
         CXADDA4  qformat                        		;        CXADDA4  $qformat
         STRH    R5, [pssDout, #2]                       ;        STRH    Ai, [$pssDout, #2]
@@ -241,38 +241,38 @@ preloop_v7:						        ;preloop_v7
         ;      ADRL    pssK, TableFFT_V7
         ;   3. Comment all the TableFFT_V7 data.
         ;------------------------------------------------------------------------------
-        ;        ADRL    pssK, TableFFT_V7    ; Coeff in Flash 
-        ;        ;LDR.W pssK, =TableFFT      ; Coeff in RAM 
+        ADRL    R0, TableFFT_V7    ; Coeff in Flash
+        ;LDR.W pssK, =TableFFT      ; Coeff in RAM
         
         ;................................
-        ;passloop_v7
-        ;        STMFD   SP!, {pssX,R2}
-        ;        ADD     tmp, index, index, LSL#1
-        ;        ADD     pssX, pssX, tmp
-        ;        SUB     R2, R2, #1<<16
+passloop_v7:
+        STMFD   SP!, {R1,R2}
+        ADD     R12, R3, R3, LSL#1
+        ADD     R1, R1, R12
+        SUB     R2, R2, #1<<16
         ;................
-        ;grouploop_v7
-        ;        ADD     R2,R2,index,LSL#(16-2)
+grouploop_v7:
+        ADD     R2,R2,R3,LSL#(16-2)
         ;.......
-        ;butterloop_v7
-        ;        BUTFLY4_V7  pssX,index,pssX,14,pssK
-        ;        SUBS        R2,R2, #1<<16
-        ;        BGE     butterloop_v7
+butterloop_v7:
+        BUTFLY4_V7  R1,R3,R1,14,R0
+		SUBS        R2,R2, #1<<16
+        BGE     butterloop_v7
         ;.......
-        ;        ADD     tmp, index, index, LSL#1
-        ;        ADD     pssX, pssX, tmp
-        ;        DEC     R2
-        ;        MOVS    tmp2, R2, LSL#16
-        ;        IT      NE
-        ;        SUBNE   pssK, pssK, tmp
-        ;        BNE     grouploop_v7
+        ADD     R12, R3, R3, LSL#1
+        ADD     R1, R1, R12
+        DEC     R2
+        MOVS    R14, R2, LSL#16
+        IT      NE
+        SUBNE   R0, R0, R12
+        BNE     grouploop_v7
         ;................
-        ;        LDMFD   sp!, {pssX, R2}
-        ;        QUAD    index
-        ;        MOVS    R2, R2, LSR#2    ; loop nbr /= radix
-        ;        BNE     passloop_v7
+        LDMFD   sp!, {R1, R2}
+        QUAD    R3
+        MOVS    R2, R2, LSR#2    ; loop nbr /= radix
+        BNE     passloop_v7
         ;................................
-        ;       LDMFD   SP!, {R4-R11, PC}
+        LDMFD   SP!, {R4-R11, PC}
         
         ;=============================================================================
         

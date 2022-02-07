@@ -39,7 +39,7 @@ Timer0Init(void) {
     // Page 722 of datasheet
     SYSCTL_RCGCTIMER_R |= 0x1u;
     TIMER0_CTL_R = set_bit_field_u32(TIMER0_CTL_R, 0, 1, 0);            //  1) Disable timer
-    TIMER0_CFG_R = 0;                                                   //  2) Write GPTMCFG with a value of 0
+    TIMER0_CFG_R = 0;                                                   //  2) Set to 32-bit mode
     TIMER0_TAMR_R = set_bit_field_u32(TIMER0_TAMR_R, 0, 2, 0b10);       //  3b) Set timer A to Periodic Mode
     TIMER0_TAMR_R = set_bit_field_u32(TIMER0_TAMR_R, 4, 1, 0b0);        //  4) Set timer A to count down
     TIMER0_TAILR_R = 80000000u / frequencyHz;                           //  5) Set reload value
@@ -65,7 +65,7 @@ Timer1Init(uint32_t period, uint32_t priority) {
     // Page 722 of datasheet
     SYSCTL_RCGCTIMER_R |= 0x2;
     TIMER1_CTL_R = set_bit_field_u32(TIMER1_CTL_R, 0, 1, 0);            //  1) Disable timer
-    TIMER1_CFG_R = 0;                                                   //  2) Write GPTMCFG with a value of 0
+    TIMER1_CFG_R = 0;                                                   //  2) Set to 32-bit mode
     TIMER1_TAMR_R = set_bit_field_u32(TIMER1_TAMR_R, 0, 2, 0b10);       //  3b) Set timer A to Periodic Mode
     TIMER1_TAMR_R = set_bit_field_u32(TIMER1_TAMR_R, 4, 1, 0b0);        //  4) Set timer A to count down
     TIMER1_TAILR_R = period;                                            //  5) Set reload value
@@ -80,4 +80,25 @@ Timer1IntHandler(void) {
     TIMER1_ICR_R = set_bit_field_u32(TIMER1_ICR_R, 0, 1, 0b1); // Clear interrupt
 
     (*PeriodicTask)();
+}
+
+// Using this as a OS high resolution system timer
+void
+Timer2Init(uint32_t period, uint32_t priority) {
+    // Page 722 of datasheet
+    SYSCTL_RCGCTIMER_R |= 0x4;
+    TIMER2_CTL_R = set_bit_field_u32(TIMER2_CTL_R, 0, 1, 0);            //  1) Disable timer
+    TIMER2_CFG_R = 0;                                                   //  2) Set to 32-bit mode
+    TIMER2_TAMR_R = set_bit_field_u32(TIMER2_TAMR_R, 0, 2, 0b10);       //  3b) Set timer A to Periodic Mode
+    TIMER2_TAMR_R = set_bit_field_u32(TIMER2_TAMR_R, 4, 1, 0b1);        //  4) Set timer A to count up
+    TIMER2_TAILR_R = period;                                            //  5) Set reload value
+    TIMER2_IMR_R = set_bit_field_u32(TIMER2_IMR_R, 0, 1, 0);            //  6) Disable timer A time-out interrupt
+    NVIC_PRI5_R = set_bit_field_u32(NVIC_PRI5_R, 29, 3, priority);      // Interrupt 23
+    NVIC_EN0_R = set_bit_field_u32(NVIC_EN0_R, 23, 1, 1);
+    TIMER2_CTL_R = set_bit_field_u32(TIMER2_CTL_R, 0, 1, 1);            //  7) Enable timer and start counting
+}
+
+void
+Timer2IntHandler(void) {
+    TIMER2_ICR_R = set_bit_field_u32(TIMER2_ICR_R, 0, 1, 0b1); // Clear interrupt
 }

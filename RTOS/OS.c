@@ -27,6 +27,10 @@
 
 #define LAUNCHPAD_BUTTON_DEBOUNCE_MS 10u
 
+#define OS_FIFO_SIZE 128u
+
+#define NEXT_FIFO_INDEX(i) (((i) + 1) % OS_FIFO_SIZE)
+
 extern void
 StartOS(void);
 
@@ -43,7 +47,7 @@ uint64_t osTimeMs;
 int id_counter = 0;
 
 #define MAX_THREADS_COUNT 20
-#define THREAD_STACK_SIZE 100
+#define THREAD_STACK_SIZE 256
 TCB_t tcb_list[MAX_THREADS_COUNT];
 TCBPtr RunPt;
 TCBPtr NextRunPt;
@@ -51,6 +55,10 @@ TCBPtr NextRunPt;
 int16_t threadCount;
 
 int32_t stack[MAX_THREADS_COUNT][THREAD_STACK_SIZE];
+
+int32_t os_fifo[OS_FIFO_SIZE];
+uintptr_t os_fifo_ptr_head;
+uintptr_t os_fifo_ptr_tail;
 
 /*------------------------------------------------------------------------------
  Systick Interrupt Handler
@@ -91,6 +99,9 @@ OS_Init(void) {
 
     // Start 1ms periodic timer
     Timer0Init();
+
+    // Start high res system timer
+    Timer2Init(0xFFFFFFFF, 7);
 }
 
 // ******** OS_InitSemaphore ************
@@ -452,13 +463,13 @@ OS_AddSW2Task(void
 void
 OS_Sleep(uint32_t sleepTime) {
     // put Lab 2 (and beyond) solution here
-    DisableInterrupts();
+    uint32_t sr = StartCritical();
 
     RunPt->sleep_state = sleepTime;
 
     OS_Suspend();
 
-    EnableInterrupts();
+    EndCritical(sr);
 }
 
 // ******** OS_Kill ************
@@ -468,6 +479,7 @@ OS_Sleep(uint32_t sleepTime) {
 void
 OS_Kill(void) {
     // put Lab 2 (and beyond) solution here
+    uint32_t sr = StartCritical();
 
     // Remove RunPt from TCB Chain
     RunPt->TCB_previous->TCB_next = RunPt->TCB_next;
@@ -477,7 +489,7 @@ OS_Kill(void) {
     RunPt->id = -1;
 
     OS_Suspend();
-//    EnableInterrupts();   // end of atomic section
+    EndCritical(sr);
 
 }
 ;
@@ -510,6 +522,9 @@ void
 OS_Fifo_Init(uint32_t size) {
     // put Lab 2 (and beyond) solution here
 
+    // reset ptr to head of fifo
+    os_fifo_ptr_head = 0;
+    os_fifo_ptr_tail = 0;
 }
 ;
 
@@ -524,10 +539,20 @@ OS_Fifo_Init(uint32_t size) {
 int
 OS_Fifo_Put(uint32_t data) {
     // put Lab 2 (and beyond) solution here
+    int rv = 1;
 
-    return 0; // replace this line with solution
+    if (NEXT_FIFO_INDEX(os_fifo_ptr_head) == os_fifo_ptr_tail) {
+        // full
+        rv = 0;
+        goto exit;
+    }
+
+    os_fifo[os_fifo_ptr_head] = data;
+    os_fifo_ptr_head = NEXT_FIFO_INDEX(os_fifo_ptr_head);
+
+exit:
+    return rv;
 }
-;
 
 // ******** OS_Fifo_Get ************
 // Remove one data sample from the Fifo
@@ -537,10 +562,16 @@ OS_Fifo_Put(uint32_t data) {
 uint32_t
 OS_Fifo_Get(void) {
     // put Lab 2 (and beyond) solution here
+    uint32_t rv;
 
-    return 0; // replace this line with solution
+    // empty
+    while (os_fifo_ptr_tail == os_fifo_ptr_head);
+
+    rv = os_fifo[os_fifo_ptr_tail];
+    os_fifo_ptr_tail = NEXT_FIFO_INDEX(os_fifo_ptr_tail);
+
+    return rv;
 }
-;
 
 // ******** OS_Fifo_Size ************
 // Check the status of the Fifo
@@ -552,10 +583,20 @@ OS_Fifo_Get(void) {
 int32_t
 OS_Fifo_Size(void) {
     // put Lab 2 (and beyond) solution here
+    int32_t rv;
 
-    return 0; // replace this line with solution
+    if (os_fifo_ptr_head >= os_fifo_ptr_tail) {
+        rv = os_fifo_ptr_head - os_fifo_ptr_tail;
+    } else {
+        rv = os_fifo_ptr_head + OS_FIFO_SIZE - os_fifo_ptr_tail;
+    }
+
+    return rv;
 }
-;
+
+static Sema4Type Mailbox_DataValid;
+static Sema4Type Mailbox_BoxFree;
+static uint32_t Mailbox_Data;
 
 // ******** OS_MailBox_Init ************
 // Initialize communication channel
@@ -564,8 +605,8 @@ OS_Fifo_Size(void) {
 void
 OS_MailBox_Init(void) {
     // put Lab 2 (and beyond) solution here
-
-    // put solution here
+    OS_InitSemaphore(&Mailbox_DataValid, 0);
+    OS_InitSemaphore(&Mailbox_BoxFree, 1);
 }
 ;
 
@@ -578,7 +619,9 @@ OS_MailBox_Init(void) {
 void
 OS_MailBox_Send(uint32_t data) {
     // put Lab 2 (and beyond) solution here
-    // put solution here
+    OS_bWait(&Mailbox_BoxFree);
+    Mailbox_Data = data;
+    OS_bSignal(&Mailbox_DataValid);
 
 }
 ;
@@ -592,8 +635,13 @@ OS_MailBox_Send(uint32_t data) {
 uint32_t
 OS_MailBox_Recv(void) {
     // put Lab 2 (and beyond) solution here
+    uint32_t rv;
 
-    return 0; // replace this line with solution
+    OS_bWait(&Mailbox_DataValid);
+    rv = Mailbox_Data;
+    OS_bSignal(&Mailbox_BoxFree);
+
+    return rv;
 }
 ;
 
@@ -608,7 +656,7 @@ uint32_t
 OS_Time(void) {
     // put Lab 2 (and beyond) solution here
 
-    return 0; // replace this line with solution
+    return TIMER2_TAR_R; // replace this line with solution
 }
 ;
 
@@ -622,8 +670,14 @@ OS_Time(void) {
 uint32_t
 OS_TimeDifference(uint32_t start, uint32_t stop) {
     // put Lab 2 (and beyond) solution here
+    uint32_t rv;
 
-    return 0; // replace this line with solution
+    if (stop > start) {
+        rv = stop - start;
+    } else {
+        rv = start - stop;
+    }
+    return rv;
 }
 ;
 

@@ -275,6 +275,7 @@ PID(void) {
     while (NumSamples < RUNLENGTH) {
         for (err = -1000; err <= 1000; err++) {    // made-up data
             Actuator = PID_stm32(err, Coeff) / 256;
+//            Actuator = err * Coeff[0];
         }
         PIDWork++;        // calculation finished
     }
@@ -335,7 +336,7 @@ realmain(void) {     // realmain
     NumCreated = 0;
     NumCreated += OS_AddThread(&Consumer, 128, 0);
     NumCreated += OS_AddThread(&Interpreter, 128, 0);
-    NumCreated += OS_AddThread(&PID, 128, 0);
+//    NumCreated += OS_AddThread(&PID, 128, 0);
 
     OS_Launch(TIME_2MS); // doesn't return, interrupts enabled in here
     return 0;            // this never executes
@@ -720,7 +721,10 @@ TestmainFIFO(void) {   // TestmainFIFO
 int
 main(void) { 			// main
     GPIO_Initialize();
+    ST7735_InitR(INITR_GREENTAB);             // LCD initialization
+    UART_Init();                              // serial I/O for interpreter
 
-    Testmain4();
-    //    realmain();
+    realmain();
+
+    while(1);
 }
