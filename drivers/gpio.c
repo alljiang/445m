@@ -63,9 +63,8 @@ void
 GPIO_EnableEdgeInterrupt(enum Port port, uint8_t pinNum,
         enum EdgeEvent risingEdge) {
     if (port == PORT_A) {
-        NVIC_PRI0_R = set_bit_field_u32(NVIC_PRI0_R, 5, 3, 2u); // Priority 2, Interrupt 0
-
-        NVIC_EN0_R = set_bit_field_u32(NVIC_EN0_R, 0, 1, 1);
+        Interrupt_SetPriority(0);
+        Interrupt_Enable(0, 2);
 
         // set pin to input
         GPIO_PORTA_DIR_R = set_bit_field_u32(GPIO_PORTA_DIR_R, pinNum, 1, 0);
@@ -87,9 +86,8 @@ GPIO_EnableEdgeInterrupt(enum Port port, uint8_t pinNum,
         // 1 to enable interrupt
         GPIO_PORTA_IM_R = set_bit_field_u32(GPIO_PORTA_IM_R, pinNum, 1, 1);
     } else if (port == PORT_B) {
-        NVIC_PRI0_R = set_bit_field_u32(NVIC_PRI0_R, 13, 3, 2u); // Priority 2, Interrupt 1
-
-        NVIC_EN0_R = set_bit_field_u32(NVIC_EN0_R, 1, 1, 1);
+        Interrupt_SetPriority(1);
+        Interrupt_Enable(1, 2);
 
         GPIO_PORTB_DIR_R = set_bit_field_u32(GPIO_PORTB_DIR_R, pinNum, 1, 0);
 
@@ -105,9 +103,8 @@ GPIO_EnableEdgeInterrupt(enum Port port, uint8_t pinNum,
 
         GPIO_PORTB_IM_R = set_bit_field_u32(GPIO_PORTB_IM_R, pinNum, 1, 1);
     } else if (port == PORT_C) {
-        NVIC_PRI0_R = set_bit_field_u32(NVIC_PRI0_R, 21, 3, 2u); // Priority 2, Interrupt 2
-
-        NVIC_EN0_R = set_bit_field_u32(NVIC_EN0_R, 2, 1, 1);
+        Interrupt_SetPriority(2);
+        Interrupt_Enable(2, 2);
 
         GPIO_PORTC_DIR_R = set_bit_field_u32(GPIO_PORTC_DIR_R, pinNum, 1, 0);
 
@@ -123,9 +120,8 @@ GPIO_EnableEdgeInterrupt(enum Port port, uint8_t pinNum,
 
         GPIO_PORTB_IM_R = set_bit_field_u32(GPIO_PORTB_IM_R, pinNum, 1, 1);
     } else if (port == PORT_D) {
-        NVIC_PRI0_R = set_bit_field_u32(NVIC_PRI0_R, 29, 3, 2u); // Priority 2, Interrupt 3
-
-        NVIC_EN0_R = set_bit_field_u32(NVIC_EN0_R, 3, 1, 1);
+        Interrupt_SetPriority(3);
+        Interrupt_Enable(3, 2);
 
         GPIO_PORTD_DIR_R = set_bit_field_u32(GPIO_PORTD_DIR_R, pinNum, 1, 0);
 
@@ -141,9 +137,8 @@ GPIO_EnableEdgeInterrupt(enum Port port, uint8_t pinNum,
 
         GPIO_PORTB_IM_R = set_bit_field_u32(GPIO_PORTB_IM_R, pinNum, 1, 1);
     } else if (port == PORT_E) {
-        NVIC_PRI1_R = set_bit_field_u32(NVIC_PRI1_R, 5, 3, 2u); // Priority 2, Interrupt 4
-
-        NVIC_EN0_R = set_bit_field_u32(NVIC_EN0_R, 4, 1, 1);
+        Interrupt_SetPriority(4);
+        Interrupt_Enable(4, 2);
 
         GPIO_PORTE_DIR_R = set_bit_field_u32(GPIO_PORTE_DIR_R, pinNum, 1, 0);
 
@@ -159,9 +154,8 @@ GPIO_EnableEdgeInterrupt(enum Port port, uint8_t pinNum,
 
         GPIO_PORTE_IM_R = set_bit_field_u32(GPIO_PORTE_IM_R, pinNum, 1, 1);
     } else if (port == PORT_F) {
-        NVIC_PRI7_R = set_bit_field_u32(NVIC_PRI7_R, 21, 3, 2u); // Priority 2, Interrupt 30
-
-        NVIC_EN0_R = set_bit_field_u32(NVIC_EN0_R, 30, 1, 1);
+        Interrupt_SetPriority(30);
+        Interrupt_Enable(30, 2);
 
         GPIO_PORTF_DIR_R = set_bit_field_u32(GPIO_PORTF_DIR_R, pinNum, 1, 0);
 
