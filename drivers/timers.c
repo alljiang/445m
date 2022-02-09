@@ -21,7 +21,7 @@ void
 SysTick_Init(unsigned long period) {
     NVIC_ST_CTRL_R = 0;                                                     // disable SysTick
     NVIC_ST_CURRENT_R = 0;                                                  // clear current counter
-    Interrupt_SetSystemPriority(15, 1);
+    Interrupt_SetSystemPriority(15, 0);
     NVIC_ST_RELOAD_R = period - 1;                                          // reload value
     NVIC_ST_CTRL_R = 0x00000007;                                            // enable, core clock and interrupt arm
 }

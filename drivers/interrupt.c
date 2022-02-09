@@ -11,7 +11,9 @@ Interrupt_Enable(uint8_t interruptNum) {
 
     volatile uint32_t *nvicEnableBase = &NVIC_EN0_R;
     uint8_t registerOffset = interruptNum / 32u;
-    volatile uint32_t *nvicEnableReg = nvicEnableBase + registerOffset * 0x4;
+    volatile uint32_t *nvicEnableReg =
+            (volatile uint32_t*) ((uint32_t) nvicEnableBase
+                    + registerOffset * 0x4);
 
     uint8_t bitOffset = interruptNum % 32;
 
@@ -26,9 +28,10 @@ Interrupt_SetPriority(uint8_t interruptNum, uint8_t priority) {
 
     // TM4C123GH6PM Datasheet: Page 152
     volatile uint32_t *nvicPriorityBase = &NVIC_PRI0_R;
-    uint8_t registerOffset = interruptNum / 4;
-    volatile uint32_t *nvicPriorityReg = nvicPriorityBase
-            + registerOffset * 0x4;
+    uint32_t registerOffset = interruptNum / 4;
+    volatile uint32_t *nvicPriorityReg =
+            (volatile uint32_t*) ((uint32_t) nvicPriorityBase
+                    + registerOffset * 0x4);
 
     uint8_t bitFieldIndex = interruptNum % 4;
     uint8_t bitOffset = 8 * bitFieldIndex + 5;
@@ -64,8 +67,9 @@ Interrupt_SetSystemPriority(uint8_t interruptNum, uint8_t priority) {
     volatile uint32_t *nvicPriorityBase = &NVIC_SYS_PRI1_R;
     uint8_t registerOffset = interruptNum / 4 - 1;
 
-    volatile uint32_t *nvicPriorityReg = nvicPriorityBase
-            + registerOffset * 0x4;
+    volatile uint32_t *nvicPriorityReg =
+            (volatile uint32_t*) ((uint32_t) nvicPriorityBase
+                    + registerOffset * 0x4);
 
     uint8_t bitFieldIndex = interruptNum % 4;
     uint8_t bitOffset = 8 * bitFieldIndex + 5;
