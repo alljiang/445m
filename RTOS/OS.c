@@ -23,9 +23,11 @@
 #include "vware/InterruptFunctions.h"
 #include "bit-utils.h"
 #include "gpio.h"
+#include "interrupt.h"
+#include "launchpad.h"
 #include "timers.h"
 
-#define LAUNCHPAD_BUTTON_DEBOUNCE_MS 10u
+#define LAUNCHPAD_BUTTON_DEBOUNCE_MS 100u
 
 #define OS_FIFO_SIZE 128u
 
@@ -47,7 +49,7 @@ uint64_t osTimeMs;
 int id_counter = 0;
 
 #define MAX_THREADS_COUNT 20
-#define THREAD_STACK_SIZE 256
+#define THREAD_STACK_SIZE 128
 TCB_t tcb_list[MAX_THREADS_COUNT];
 TCBPtr RunPt;
 TCBPtr NextRunPt;
@@ -95,7 +97,7 @@ OS_Init(void) {
     threadCount = 0;
 
     // Set PendSV priority
-    NVIC_SYS_PRI3_R = set_bit_field_u32(NVIC_SYS_PRI3_R, 24, 8, 0xD0); // priority 6
+    Interrupt_SetSystemPriority(14, 7u);
 
     // Start 1ms periodic timer
     Timer0Init();
@@ -125,17 +127,21 @@ OS_InitSemaphore(Sema4Type *semaPt, int32_t value) {
 void
 OS_Wait(Sema4Type *semaPt) {
     // put Lab 2 (and beyond) solution here
-    int32_t sr = StartCritical();
+    DisableInterrupts();
+    Launchpad_SetLED(LED_RED, 1);
 
     while (semaPt->Value <= 0) {
-        EndCritical(sr);
+        Launchpad_SetLED(LED_RED, 0);
+        EnableInterrupts();
         OS_Suspend();
-        sr = StartCritical();
+        DisableInterrupts();
+        Launchpad_SetLED(LED_RED, 1);
     }
 
     semaPt->Value--;
 
-    EndCritical(sr);
+    Launchpad_SetLED(LED_RED, 0);
+    EnableInterrupts();
 }
 
 // ******** OS_Signal ************
@@ -162,17 +168,21 @@ OS_Signal(Sema4Type *semaPt) {
 void
 OS_bWait(Sema4Type *semaPt) {
     // put Lab 2 (and beyond) solution here
-    int32_t sr = StartCritical();
+    DisableInterrupts();
+    Launchpad_SetLED(LED_RED, true);
 
     while (semaPt->Value == 0) {
-        EndCritical(sr);
+        Launchpad_SetLED(LED_RED, false);
+        EnableInterrupts();
         OS_Suspend();
-        sr = StartCritical();
+        DisableInterrupts();
+        Launchpad_SetLED(LED_RED, true);
     }
 
     semaPt->Value = 0;
 
-    EndCritical(sr);
+    Launchpad_SetLED(LED_RED, false);
+    EnableInterrupts();
 }
 
 // ******** OS_bSignal ************
@@ -183,6 +193,7 @@ OS_bWait(Sema4Type *semaPt) {
 void
 OS_bSignal(Sema4Type *semaPt) {
     // put Lab 2 (and beyond) solution here
+
     int32_t sr = StartCritical();
 
     semaPt->Value = 1;
@@ -374,11 +385,11 @@ OS_AddPeriodicThread(void
 /*----------------------------------------------------------------------------
  PF1 Interrupt Handler
  *----------------------------------------------------------------------------*/
+#define OS_DEBOUNCE (false)
 void
 (*SW1Task)(void);
 void
 (*SW2Task)(void);
-uint8_t SW1Task_Priority, SW2Task_Priority;
 uint32_t lastPF0EdgeInterrupt = 0, lastPF4EdgeInterrupt = 0;
 void
 GPIOPortF_Handler(void) {
@@ -386,7 +397,7 @@ GPIOPortF_Handler(void) {
     if (GPIO_PORTF_RIS_R & (1u << 0u)) {
         // PF0
         GPIO_ClearInterruptStatus(PORT_F, 0);
-        if (ms - lastPF0EdgeInterrupt > LAUNCHPAD_BUTTON_DEBOUNCE_MS) {
+        if (!OS_DEBOUNCE || ms - lastPF0EdgeInterrupt > LAUNCHPAD_BUTTON_DEBOUNCE_MS) {
             lastPF0EdgeInterrupt = ms;
 
             if (SW2Task != NULL) {
@@ -394,7 +405,7 @@ GPIOPortF_Handler(void) {
                 (*SW2Task)();
             }
         }
-    } else if (GPIO_PORTF_RIS_R & (1u << 4u)) {
+    } else if (!OS_DEBOUNCE || GPIO_PORTF_RIS_R & (1u << 4u)) {
         // PF4
         GPIO_ClearInterruptStatus(PORT_F, 4);
         if (ms - lastPF4EdgeInterrupt > LAUNCHPAD_BUTTON_DEBOUNCE_MS) {
@@ -425,10 +436,11 @@ int
 OS_AddSW1Task(void
 (*task)(void), uint32_t priority) {
     // put Lab 2 (and beyond) solution here
+    uint32_t sr = StartCritical();
     SW1Task = task;
-    SW1Task_Priority = priority;
-    GPIO_EnableEdgeInterrupt(PORT_F, 4, FALLING_EDGE);
-    return 0; // replace this line with solution
+    GPIO_EnableEdgeInterrupt(PORT_F, 4, FALLING_EDGE, priority);
+    EndCritical(sr);
+    return 1; // replace this line with solution
 }
 
 //******** OS_AddSW2Task *************** 
@@ -448,10 +460,11 @@ int
 OS_AddSW2Task(void
 (*task)(void), uint32_t priority) {
     // put Lab 2 (and beyond) solution here
+    uint32_t sr = StartCritical();
     SW2Task = task;
-    SW2Task_Priority = priority;
-    GPIO_EnableEdgeInterrupt(PORT_F, 0, FALLING_EDGE);
-    return 0; // replace this line with solution
+    GPIO_EnableEdgeInterrupt(PORT_F, 0, FALLING_EDGE, priority);
+    EndCritical(sr);
+    return 1; // replace this line with solution
 }
 
 // ******** OS_Sleep ************
@@ -467,9 +480,9 @@ OS_Sleep(uint32_t sleepTime) {
 
     RunPt->sleep_state = sleepTime;
 
+    EndCritical(sr);
     OS_Suspend();
 
-    EndCritical(sr);
 }
 
 // ******** OS_Kill ************
@@ -488,11 +501,10 @@ OS_Kill(void) {
     // Deactivate RunPt's ID to indicate death
     RunPt->id = -1;
 
-    OS_Suspend();
     EndCritical(sr);
+    OS_Suspend();
 
 }
-;
 
 // ******** OS_Suspend ************
 // suspend execution of currently running thread
@@ -504,8 +516,8 @@ OS_Kill(void) {
 void
 OS_Suspend(void) {
     // put Lab 2 (and beyond) solution here
-    NVIC_ST_CURRENT_R = 0;          // clear timer
-    NVIC_INT_CTRL_R = 0x04000000;   // trigger SysTick Handler
+    NVIC_ST_CURRENT_R = 0;          // reset SysTick timer
+    NVIC_INT_CTRL_R = set_bit_field_u32(NVIC_INT_CTRL_R, 26, 1, 1);   // trigger SysTick handler
 }
 ;
 
@@ -518,15 +530,19 @@ OS_Suspend(void) {
 // In Lab 3, you can put whatever restrictions you want on size
 //    e.g., 4 to 64 elements
 //    e.g., must be a power of 2,4,8,16,32,64,128
+Sema4Type FifoDataAvailable;
 void
 OS_Fifo_Init(uint32_t size) {
     // put Lab 2 (and beyond) solution here
+    uint32_t sr = StartCritical();
 
     // reset ptr to head of fifo
     os_fifo_ptr_head = 0;
     os_fifo_ptr_tail = 0;
+
+    OS_InitSemaphore(&FifoDataAvailable, 0);
+    EndCritical(sr);
 }
-;
 
 // ******** OS_Fifo_Put ************
 // Enter one data sample into the Fifo
@@ -541,7 +557,9 @@ OS_Fifo_Put(uint32_t data) {
     // put Lab 2 (and beyond) solution here
     int rv = 1;
 
-    if (NEXT_FIFO_INDEX(os_fifo_ptr_head) == os_fifo_ptr_tail) {
+    uint32_t sr = StartCritical();
+
+    if (FifoDataAvailable.Value == OS_FIFO_SIZE) {
         // full
         rv = 0;
         goto exit;
@@ -549,8 +567,10 @@ OS_Fifo_Put(uint32_t data) {
 
     os_fifo[os_fifo_ptr_head] = data;
     os_fifo_ptr_head = NEXT_FIFO_INDEX(os_fifo_ptr_head);
+    OS_Signal(&FifoDataAvailable);
 
 exit:
+    EndCritical(sr);
     return rv;
 }
 
@@ -565,10 +585,14 @@ OS_Fifo_Get(void) {
     uint32_t rv;
 
     // empty
-    while (os_fifo_ptr_tail == os_fifo_ptr_head);
+    OS_Wait(&FifoDataAvailable);
+
+    uint32_t sr = StartCritical();
 
     rv = os_fifo[os_fifo_ptr_tail];
     os_fifo_ptr_tail = NEXT_FIFO_INDEX(os_fifo_ptr_tail);
+
+    EndCritical(sr);
 
     return rv;
 }
@@ -743,6 +767,12 @@ OS_Scheduler(void) {
     while (NextRunPt->sleep_state > 0) {
         NextRunPt = NextRunPt->TCB_next;
     }
+
+//    if (NextRunPt->id == 1) {
+//        Launchpad_SetLED(LED_RED, true);
+//    } else {
+//        Launchpad_SetLED(LED_RED, false);
+//    }
 }
 
 //************** I/O Redirection *************** 

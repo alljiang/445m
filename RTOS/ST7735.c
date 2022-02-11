@@ -564,6 +564,7 @@ void static writecommand(uint8_t c) {
   while((SSI0_SR_R&SSI_SR_RNE)==0){};   // wait until response
   TFT_CS = TFT_CS_HIGH;
   response = SSI0_DR_R;                 // acknowledge response
+
 }
 
 void static writedata(uint8_t c) {
@@ -1267,6 +1268,12 @@ void ST7735_DrawChar(int16_t x, int16_t y, char c, int16_t textColor, int16_t bg
 
  // deselect();
 }
+
+
+void ST7735_ClearLine(uint16_t x, uint16_t y, int16_t textColor) {
+    ST7735_FillRect(x*6, y*10, ST7735_TFTWIDTH, 8, textColor);
+}
+
 //------------ST7735_DrawString------------
 // String draw function.
 // 16 rows (0 to 15) and 21 characters (0 to 20)
@@ -1407,8 +1414,10 @@ void ST7735_OutUDec2(uint32_t n, uint32_t l){
 //        line    row from top, 0 to 7 for each device
 //        pt      pointer to a null terminated string to be printed
 //        value   signed integer to be printed
-char buffer[50];
+
+char buffer[40];
 void ST7735_Message(uint32_t  d, uint32_t  l, char *pt, int32_t value){
+    OS_bWait(&LCDFree);
     int i = 0;
 
     // write this as part of Labs 1 and 2
@@ -1422,10 +1431,12 @@ void ST7735_Message(uint32_t  d, uint32_t  l, char *pt, int32_t value){
         buffer[i++] = *pt;
         pt++;
     }
-    itoa(value, buffer + i);
+    uint8_t count = itoa(value, buffer + i);
+    buffer[i + count] = '\0';
 
-    // First, draw the text
-    ST7735_DrawString(0, line, buffer, 0xFFFF);
+    uint32_t charCount = ST7735_DrawString(0, line, buffer, 0xFFFF);
+    ST7735_ClearLine(charCount, line, 0);
+    OS_bSignal(&LCDFree);
 }
 
 //-----------------------ST7735_OutUDec4-----------------------

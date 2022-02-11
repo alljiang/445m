@@ -1,5 +1,8 @@
 
+#include <stdint.h>
+#include <stdbool.h>
 #include "InterruptFunctions.h"
+#include "drivers/launchpad.h"
 
 void DisableInterrupts(void) {
     asm("        CPSID  I");

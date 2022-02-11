@@ -53,6 +53,14 @@
 #include "vware/InterruptFunctions.h"
 #include "vware/IRDistance.h"
 
+#define SW1 2
+#define SW2 1
+#define PF4             (*((volatile uint32_t *)0x40025040))
+#define PF3             (*((volatile uint32_t *)0x40025020))
+#define PF2             (*((volatile uint32_t *)0x40025010))
+#define PF1             (*((volatile uint32_t *)0x40025008))
+#define PF0             (*((volatile uint32_t *)0x40025004))
+
 int32_t ADCdata, FilterOutput, Distance;
 uint32_t FilterWork;
 

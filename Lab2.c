@@ -44,6 +44,7 @@
 #include "vware/IRDistance.h"
 
 #include "gpio.h"
+#include "launchpad.h"
 
 //*********Prototype for FFT in cr4_fft_64_stm32.s, STMicroelectronics
 void
@@ -162,7 +163,7 @@ ButtonWork(void) {
 void
 SW1Push(void) {
     if (OS_MsTime() > 20) { // debounce
-        if (OS_AddThread(&ButtonWork, 100, 0)) {
+        if (OS_AddThread(&ButtonWork, 128, 0)) {
             NumCreated++;
         }
         OS_ClearMsTime();  // at least 20ms between touches
@@ -275,7 +276,6 @@ PID(void) {
     while (NumSamples < RUNLENGTH) {
         for (err = -1000; err <= 1000; err++) {    // made-up data
             Actuator = PID_stm32(err, Coeff) / 256;
-//            Actuator = err * Coeff[0];
         }
         PIDWork++;        // calculation finished
     }
@@ -337,8 +337,8 @@ realmain(void) {     // realmain
     // create initial foreground threads
     NumCreated = 0;
     NumCreated += OS_AddThread(&Consumer, 128, 0);
-    NumCreated += OS_AddThread(&Interpreter, 128, 0);
-//    NumCreated += OS_AddThread(&PID, 128, 0);
+//    NumCreated += OS_AddThread(&Interpreter, 128, 0);
+    NumCreated += OS_AddThread(&PID, 128, 0);
 
     OS_Launch(TIME_2MS); // doesn't return, interrupts enabled in here
     return 0;            // this never executes
@@ -715,17 +715,19 @@ TestmainFIFO(void) {   // TestmainFIFO
     OS_Fifo_Init(16);
     NumCreated += OS_AddThread(&ConsumerThreadFIFO, 128, 0);
     NumCreated += OS_AddThread(&FillerThreadFIFO, 128, 0);
-    OS_Launch(TIME_2MS); // doesn't return, interrupts enabled in here
+    OS_Launch(TIME_2MS*100); // doesn't return, interrupts enabled in here
     return 0;            // this never executes
 }
 
 //*******************Trampoline for selecting main to execute**********
 int
 main(void) { 			// main
-    GPIO_Initialize();
 
-//    realmain();
-    Testmain1();
+    PLL_Init(Bus80MHz);
+    GPIO_Initialize();
+    Launchpad_PortFInitialize();
+
+    realmain();
 
     while(1);
 }

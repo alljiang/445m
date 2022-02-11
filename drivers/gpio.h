@@ -25,12 +25,10 @@ GPIO_PortFHandler(void);
 extern void
 GPIO_Initialize(void);
 
-extern void
-GPIO_PortFInitialize(void);
 
 extern void
 GPIO_EnableEdgeInterrupt(enum Port port, uint8_t pinNum,
-        enum EdgeEvent risingEdge);
+        enum EdgeEvent risingEdge, uint8_t priority);
 
 extern void
 GPIO_ClearInterruptStatus(enum Port port, uint8_t pinNum);

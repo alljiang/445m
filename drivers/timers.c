@@ -3,6 +3,7 @@
 #include "timers.h"
 #include "vware/tm4c123gh6pm.h"
 #include "RTOS/OS.h"
+#include "Launchpad.h"
 
 extern uint64_t osTimeMs;
 
@@ -21,7 +22,7 @@ void
 SysTick_Init(unsigned long period) {
     NVIC_ST_CTRL_R = 0;                                                     // disable SysTick
     NVIC_ST_CURRENT_R = 0;                                                  // clear current counter
-    Interrupt_SetSystemPriority(15, 0);
+    Interrupt_SetSystemPriority(15, 6);
     NVIC_ST_RELOAD_R = period - 1;                                          // reload value
     NVIC_ST_CTRL_R = 0x00000007;                                            // enable, core clock and interrupt arm
 }
@@ -44,7 +45,7 @@ Timer0Init(void) {
     TIMER0_TAMR_R = set_bit_field_u32(TIMER0_TAMR_R, 4, 1, 0b0);        //  4) Set timer A to count down
     TIMER0_TAILR_R = 80000000u / frequencyHz;                           //  5) Set reload value
     TIMER0_IMR_R = set_bit_field_u32(TIMER0_IMR_R, 0, 1, 1);            //  6) Enable timer A time-out interrupt
-    Interrupt_SetPriority(19, 2);
+    Interrupt_SetPriority(19, 1);
     Interrupt_Enable(19);
     TIMER0_CTL_R = set_bit_field_u32(TIMER0_CTL_R, 0, 1, 1);            //  7) Enable timer and start counting
 }
