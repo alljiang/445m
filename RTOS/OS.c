@@ -128,19 +128,15 @@ void
 OS_Wait(Sema4Type *semaPt) {
     // put Lab 2 (and beyond) solution here
     DisableInterrupts();
-    Launchpad_SetLED(LED_RED, 1);
 
     while (semaPt->Value <= 0) {
-        Launchpad_SetLED(LED_RED, 0);
         EnableInterrupts();
         OS_Suspend();
         DisableInterrupts();
-        Launchpad_SetLED(LED_RED, 1);
     }
 
     semaPt->Value--;
 
-    Launchpad_SetLED(LED_RED, 0);
     EnableInterrupts();
 }
 
@@ -150,14 +146,15 @@ OS_Wait(Sema4Type *semaPt) {
 // Lab3 wakeup blocked thread if appropriate 
 // input:  pointer to a counting semaphore
 // output: none
+
 void
 OS_Signal(Sema4Type *semaPt) {
     // put Lab 2 (and beyond) solution here
-    int32_t sr = StartCritical();
+    DisableInterrupts();
 
     semaPt->Value++;
 
-    EndCritical(sr);
+    EnableInterrupts();
 }
 
 // ******** OS_bWait ************
@@ -169,19 +166,15 @@ void
 OS_bWait(Sema4Type *semaPt) {
     // put Lab 2 (and beyond) solution here
     DisableInterrupts();
-    Launchpad_SetLED(LED_RED, true);
 
     while (semaPt->Value == 0) {
-        Launchpad_SetLED(LED_RED, false);
         EnableInterrupts();
         OS_Suspend();
         DisableInterrupts();
-        Launchpad_SetLED(LED_RED, true);
     }
 
     semaPt->Value = 0;
 
-    Launchpad_SetLED(LED_RED, false);
     EnableInterrupts();
 }
 
@@ -557,8 +550,6 @@ OS_Fifo_Put(uint32_t data) {
     // put Lab 2 (and beyond) solution here
     int rv = 1;
 
-    uint32_t sr = StartCritical();
-
     if (FifoDataAvailable.Value == OS_FIFO_SIZE) {
         // full
         rv = 0;
@@ -570,7 +561,6 @@ OS_Fifo_Put(uint32_t data) {
     OS_Signal(&FifoDataAvailable);
 
 exit:
-    EndCritical(sr);
     return rv;
 }
 
@@ -587,12 +577,8 @@ OS_Fifo_Get(void) {
     // empty
     OS_Wait(&FifoDataAvailable);
 
-    uint32_t sr = StartCritical();
-
     rv = os_fifo[os_fifo_ptr_tail];
     os_fifo_ptr_tail = NEXT_FIFO_INDEX(os_fifo_ptr_tail);
-
-    EndCritical(sr);
 
     return rv;
 }
@@ -716,7 +702,6 @@ OS_ClearMsTime(void) {
     osTimeMs = 0;
     Timer0Init();
 }
-;
 
 // ******** OS_MsTime ************
 // reads the current time in msec (solve for Lab 1)
@@ -767,12 +752,6 @@ OS_Scheduler(void) {
     while (NextRunPt->sleep_state > 0) {
         NextRunPt = NextRunPt->TCB_next;
     }
-
-//    if (NextRunPt->id == 1) {
-//        Launchpad_SetLED(LED_RED, true);
-//    } else {
-//        Launchpad_SetLED(LED_RED, false);
-//    }
 }
 
 //************** I/O Redirection *************** 

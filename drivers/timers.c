@@ -45,7 +45,7 @@ Timer0Init(void) {
     TIMER0_TAMR_R = set_bit_field_u32(TIMER0_TAMR_R, 4, 1, 0b0);        //  4) Set timer A to count down
     TIMER0_TAILR_R = 80000000u / frequencyHz;                           //  5) Set reload value
     TIMER0_IMR_R = set_bit_field_u32(TIMER0_IMR_R, 0, 1, 1);            //  6) Enable timer A time-out interrupt
-    Interrupt_SetPriority(19, 1);
+    Interrupt_SetPriority(19, 2);
     Interrupt_Enable(19);
     TIMER0_CTL_R = set_bit_field_u32(TIMER0_CTL_R, 0, 1, 1);            //  7) Enable timer and start counting
 }
