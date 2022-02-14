@@ -1,4 +1,4 @@
-// Lab2.c
+/// Lab2.c
 // Runs on LM4F120/TM4C123
 // Real Time Operating System for Lab 2
 // Lab2 Part 1: Testmain1 and Testmain2
@@ -125,6 +125,7 @@ DAS(void) {
                 Launchpad_ToggleLED(LED_BLUE);
             }
             if (jitter > MaxJitter) {
+                Launchpad_ToggleLED(LED_BLUE);
                 MaxJitter = jitter; // in usec
             }       // jitter should be 0
             if (jitter >= JitterSize) {
@@ -723,13 +724,16 @@ TestmainFIFO(void) {   // TestmainFIFO
 }
 
 //*******************Trampoline for selecting main to execute**********
+/*
 int
 main(void) { 			// main
     PLL_Init(Bus80MHz);
     GPIO_Initialize();
     Launchpad_PortFInitialize();
 
-    realmain();
+//    realmain();
+    TestmainCS();
 
     while(1);
 }
+*/
