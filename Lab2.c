@@ -334,14 +334,14 @@ realmain(void) {     // realmain
     ADC_Init(0);  // sequencer 3, channel 0, PE3, sampling in DAS()
 
     // attach background tasks
-    OS_AddSW1Task(&SW1Push, 2);
-    OS_AddPeriodicThread(&DAS, PERIOD, 1); // 2 kHz real time sampling of PE3
+    OS_AddSW1Task(&SW1Push, 2);                                     // IO Bound
+    OS_AddPeriodicThread(&DAS, PERIOD, 1); // 2 kHz real time sampling of PE3   // Fixed Bandwidth
 
     // create initial foreground threads
     NumCreated = 0;
-    NumCreated += OS_AddThread(&Consumer, 128, 0);
-//    NumCreated += OS_AddThread(&Interpreter, 128, 0);
-    NumCreated += OS_AddThread(&PID, 128, 0);
+    NumCreated += OS_AddThread(&Consumer, 128, 0);                  // Fixed Bandwidth
+    NumCreated += OS_AddThread(&Interpreter, 128, 0);               // IO Bound
+    NumCreated += OS_AddThread(&PID, 128, 0);                       // CPU Bound
 
     OS_Launch(TIME_2MS); // doesn't return, interrupts enabled in here
     return 0;            // this never executes

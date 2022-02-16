@@ -130,9 +130,9 @@ OS_Wait(Sema4Type *semaPt) {
     uint32_t sr = StartCritical();
 
     while (semaPt->Value <= 0) {
-        EndCritical(sr);
+        EnableInterrupts();
         OS_Suspend();
-        sr = StartCritical();
+        DisableInterrupts();
     }
     semaPt->Value--;
     EndCritical(sr);
@@ -166,9 +166,9 @@ OS_bWait(Sema4Type *semaPt) {
     uint32_t sr = StartCritical();
 
     while (semaPt->Value == 0) {
-        EndCritical(sr);
+        EnableInterrupts();
         OS_Suspend();
-        sr = StartCritical();
+        DisableInterrupts();
     }
 
     semaPt->Value = 0;

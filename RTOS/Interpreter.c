@@ -22,15 +22,14 @@
 
 #define EQ(a, b) (strcmp((a), (b)) == 0)
 
-char buffer[50];
 volatile bool printed_Prompt;
 
 const char help[] = "--------------------------\r\n"
         "Invalid command. Available commands:\r\n"
         "0) adc - Prints voltage readout of PE0\r\n"
-        "1) lcd <display, 0/1> <line, 0-8> <word> - Prints line to screen\r\n"
-        "2) - \r\n"
-        "3) - \r\n"
+        "1) lcd <display, 0/1> <line, 0-7> <word> - Prints line to LCD\r\n"
+        "2) numcreated - Prints number of threads created\r\n"
+        "3) maxjitter - Prints maximum time jitter\r\n"
         "4) - \r\n"
         "5) - \r\n"
         "6) - \r\n"
@@ -99,6 +98,8 @@ exit:
     return rv;
 }
 
+extern uint32_t NumCreated;
+extern uint32_t MaxJitter;
 void
 Interpreter_Parse(char *buffer) {
     char *token;
@@ -160,10 +161,16 @@ Interpreter_Parse(char *buffer) {
 
         UART_OutStringNonBlock(voltage_formatted_str);
         UART_OutStringNonBlock("\r\n");
-    } else if (EQ("", token)) {
-
-    } else if (EQ("", token)) {
-
+    } else if (EQ("numcreated", token)) {
+        char itoa_buf[5];
+        itoa(NumCreated, itoa_buf);
+        UART_OutStringNonBlock(itoa_buf);
+        UART_OutStringNonBlock("\r\n");
+    } else if (EQ("maxjitter", token)) {
+        char itoa_buf[5];
+        itoa(MaxJitter, itoa_buf);
+        UART_OutStringNonBlock(itoa_buf);
+        UART_OutStringNonBlock("\r\n");
     } else if (EQ("", token)) {
 
     } else if (EQ("", token)) {
@@ -178,6 +185,7 @@ Interpreter_Parse(char *buffer) {
 void
 Interpreter(void) {
     // write this
+    char buffer[30];
     char input;
     uint8_t buffer_index = 0;
     printed_Prompt = false;
