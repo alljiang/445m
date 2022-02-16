@@ -198,6 +198,5 @@ SVC_Handler
     BX      LR                   ; Return from exception
 	.endasmfunc
 
-
     .align 2	;ALIGN
     .end		;END

@@ -22,6 +22,8 @@
  http://users.ece.utexas.edu/~valvano/
  */
 #include <stdint.h>
+#include <stdbool.h>
+#include "drivers/interrupt.h"
 #include "vware/CortexM.h"
 #include "vware/tm4c123gh6pm.h"
 #define NVIC_EN0_INT17          0x00020000  // Interrupt 17 enable
@@ -230,7 +232,7 @@ uint32_t period;
   TIMER0_IMR_R = 0x00000000;    // disable all interrupts
   TIMER0_CTL_R |= 0x00000001;   // enable timer0A 32-b, periodic, no interrupts
   ADC0_PC_R = 0x01;         // configure for 125K samples/sec
-  ADC0_SSPRI_R = 0x3210;    // sequencer 0 is highest, sequencer 3 is lowest
+//  ADC0_SSPRI_R = 0x3210;    // sequencer 0 is highest, sequencer 3 is lowest
   ADC0_ACTSS_R &= ~0x01;    // disable sample sequencer 0
   ADC0_EMUX_R = (ADC0_EMUX_R&0xFFFFFFF0)+0x0005; // timer trigger event
   ADC0_SSMUX0_R = channelNum;
@@ -241,6 +243,7 @@ uint32_t period;
   NVIC_EN0_R |= 1<<14;           // enable interrupt 14 in NVIC, ADC sequence 0
   return 1;
 }
+
 void ADC0Seq0_Handler(void){ uint32_t data;
   ADC0_ISC_R = 0x01;     // acknowledge ADC sequence 0 completion
   data = ADC0_SSFIFO0_R&0xFFF;

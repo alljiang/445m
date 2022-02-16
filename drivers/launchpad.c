@@ -48,21 +48,24 @@ Launchpad_SetLED(enum LED_Color color, bool state) {
     uint32_t mask;
 
     if(color == LED_RED) {
-        mask = generate_bit_mask_u32(1, 1);
+//        mask = generate_bit_mask_u32(1, 1);
+        mask = 0b10;
         if(state) {
             PF1 |= mask;
         } else {
             PF1 &= ~mask;
         }
     } else if(color == LED_GREEN) {
-        mask = generate_bit_mask_u32(3, 1);
+//        mask = generate_bit_mask_u32(3, 1);
+        mask = 0b1000;
         if(state) {
             PF3 |= mask;
         } else {
             PF3 &= ~mask;
         }
     } else if(color == LED_BLUE) {
-        mask = generate_bit_mask_u32(2, 1);
+//        mask = generate_bit_mask_u32(2, 1);
+        mask = 0b100;
         if(state) {
             PF2 |= mask;
         } else {

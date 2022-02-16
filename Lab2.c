@@ -121,6 +121,9 @@ DAS(void) {
             } else {
                 jitter = (PERIOD - diff + 4) / 8;  // in 0.1 usec
             }
+            if(jitter > 10) {
+                Launchpad_ToggleLED(LED_BLUE);
+            }
             if (jitter > MaxJitter) {
                 MaxJitter = jitter; // in usec
             }       // jitter should be 0
@@ -722,7 +725,6 @@ TestmainFIFO(void) {   // TestmainFIFO
 //*******************Trampoline for selecting main to execute**********
 int
 main(void) { 			// main
-
     PLL_Init(Bus80MHz);
     GPIO_Initialize();
     Launchpad_PortFInitialize();

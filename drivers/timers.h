@@ -28,4 +28,10 @@ Timer2Init(uint32_t period, uint32_t priority);
 extern void
 Timer2IntHandler(void);
 
+extern void
+Timer3Init(uint32_t period, uint32_t priority);
+
+extern void
+Timer3IntHandler(void);
+
 #endif

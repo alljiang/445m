@@ -100,7 +100,7 @@ OS_Init(void) {
     Interrupt_SetSystemPriority(14, 7u);
 
     // Start 1ms periodic timer
-    Timer0Init();
+    OS_ClearMsTime();
 
     // Start high res system timer
     Timer2Init(0xFFFFFFFF, 7);
@@ -127,17 +127,15 @@ OS_InitSemaphore(Sema4Type *semaPt, int32_t value) {
 void
 OS_Wait(Sema4Type *semaPt) {
     // put Lab 2 (and beyond) solution here
-    DisableInterrupts();
+    uint32_t sr = StartCritical();
 
     while (semaPt->Value <= 0) {
-        EnableInterrupts();
+        EndCritical(sr);
         OS_Suspend();
-        DisableInterrupts();
+        sr = StartCritical();
     }
-
     semaPt->Value--;
-
-    EnableInterrupts();
+    EndCritical(sr);
 }
 
 // ******** OS_Signal ************
@@ -150,11 +148,11 @@ OS_Wait(Sema4Type *semaPt) {
 void
 OS_Signal(Sema4Type *semaPt) {
     // put Lab 2 (and beyond) solution here
-    DisableInterrupts();
+    uint32_t sr = StartCritical();
 
     semaPt->Value++;
 
-    EnableInterrupts();
+    EndCritical(sr);
 }
 
 // ******** OS_bWait ************
@@ -165,17 +163,17 @@ OS_Signal(Sema4Type *semaPt) {
 void
 OS_bWait(Sema4Type *semaPt) {
     // put Lab 2 (and beyond) solution here
-    DisableInterrupts();
+    uint32_t sr = StartCritical();
 
     while (semaPt->Value == 0) {
-        EnableInterrupts();
+        EndCritical(sr);
         OS_Suspend();
-        DisableInterrupts();
+        sr = StartCritical();
     }
 
     semaPt->Value = 0;
 
-    EnableInterrupts();
+    EndCritical(sr);
 }
 
 // ******** OS_bSignal ************
@@ -373,7 +371,6 @@ OS_AddPeriodicThread(void
     EndCritical(sr);
     return rv; // replace this line with solution
 }
-;
 
 /*----------------------------------------------------------------------------
  PF1 Interrupt Handler
@@ -700,7 +697,8 @@ void
 OS_ClearMsTime(void) {
     // put Lab 1 solution here
     osTimeMs = 0;
-    Timer0Init();
+//    Timer0Init();
+    Timer3Init(80000000u / 1000u, 2);
 }
 
 // ******** OS_MsTime ************
@@ -715,7 +713,6 @@ OS_MsTime(void) {
     // osTimeMs is incremented in timers.c
     return osTimeMs;
 }
-;
 
 //******** OS_Launch *************** 
 // start the scheduler, enable interrupts

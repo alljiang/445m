@@ -10,7 +10,8 @@ extern uint64_t osTimeMs;
 extern void
 ContextSwitch(void);
 
-void (*PeriodicTask)(void);
+extern void
+(*PeriodicTask)(void);
 
 /*
  * Datasheet Bookmarks:
@@ -36,9 +37,11 @@ SysTick_Handler() {
 void
 Timer0Init(void) {
     uint32_t frequencyHz = 1000u;
+    volatile uint32_t delay;
 
     // Page 722 of datasheet
     SYSCTL_RCGCTIMER_R |= 0x1u;
+    delay = SYSCTL_RCGCTIMER_R;                                         // allow time to finish activating
     TIMER0_CTL_R = set_bit_field_u32(TIMER0_CTL_R, 0, 1, 0);            //  1) Disable timer
     TIMER0_CFG_R = 0;                                                   //  2) Set to 32-bit mode
     TIMER0_TAMR_R = set_bit_field_u32(TIMER0_TAMR_R, 0, 2, 0b10);       //  3b) Set timer A to Periodic Mode
@@ -56,9 +59,9 @@ Timer0IntHandler(void) {
     // Page 722 of datasheet
     TIMER0_ICR_R = set_bit_field_u32(TIMER0_ICR_R, 0, 1, 0b1); //  8) Clear interrupt
 
-    osTimeMs++;
-
-    OS_UpdateSleep();
+//    osTimeMs++;
+//
+//    OS_UpdateSleep();
 }
 
 void
@@ -103,3 +106,29 @@ void
 Timer2IntHandler(void) {
     TIMER2_ICR_R = set_bit_field_u32(TIMER2_ICR_R, 0, 1, 0b1); // Clear interrupt
 }
+
+// Using this as a OS high resolution system timer
+void
+Timer3Init(uint32_t period, uint32_t priority) {
+    // Page 722 of datasheet
+    SYSCTL_RCGCTIMER_R |= 0x8;
+    TIMER3_CTL_R = set_bit_field_u32(TIMER3_CTL_R, 0, 1, 0);            //  1) Disable timer
+    TIMER3_CFG_R = 0;                                                   //  2) Set to 32-bit mode
+    TIMER3_TAMR_R = set_bit_field_u32(TIMER3_TAMR_R, 0, 2, 0b10);       //  3b) Set timer A to Periodic Mode
+    TIMER3_TAMR_R = set_bit_field_u32(TIMER3_TAMR_R, 4, 1, 0b1);        //  4) Set timer A to count up
+    TIMER3_TAILR_R = period;                                            //  5) Set reload value
+    TIMER3_IMR_R = set_bit_field_u32(TIMER3_IMR_R, 0, 1, 1);            //  6) Enable timer A time-out interrupt
+    Interrupt_SetPriority(35, priority);
+    Interrupt_Enable(35);
+    TIMER3_CTL_R = set_bit_field_u32(TIMER3_CTL_R, 0, 1, 1);            //  7) Enable timer and start counting
+}
+
+void
+Timer3IntHandler(void) {
+    TIMER3_ICR_R = set_bit_field_u32(TIMER3_ICR_R, 0, 1, 0b1); // Clear interrupt
+
+    osTimeMs++;
+
+    OS_UpdateSleep();
+}
+
