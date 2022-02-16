@@ -23,15 +23,6 @@
 #define TIME_500US  (TIME_1MS/2)  
 #define TIME_250US  (TIME_1MS/5)  
 
-/**
- * \brief Semaphore structure. Feel free to change the type of semaphore, there are lots of good solutions
- */
-struct Sema4 {
-    int32_t Value;   // >0 means free, otherwise means busy
-// add other components here, if necessary to implement blocking
-};
-typedef struct Sema4 Sema4Type;
-
 // Lecture 3 Slide 16
 typedef struct TCB {
     uintptr_t stack_pointer;
@@ -42,6 +33,15 @@ typedef struct TCB {
     int blocked_state;   // lab 3
 } TCB_t;
 typedef TCB_t *TCBPtr;
+
+/**
+ * \brief Semaphore structure. Feel free to change the type of semaphore, there are lots of good solutions
+ */
+struct Sema4 {
+    int32_t Value;   // >0 means free, otherwise means busy
+    TCBPtr blockedHead;
+};
+typedef struct Sema4 Sema4Type;
 
 /**
  * @details  Initialize operating system, disable interrupts until OS_Launch.
@@ -78,22 +78,6 @@ OS_Wait(Sema4Type *semaPt);
 // output: none
 void
 OS_Signal(Sema4Type *semaPt);
-
-// ******** OS_bWait ************
-// Lab2 spinlock, set to 0
-// Lab3 block if less than zero
-// input:  pointer to a binary semaphore
-// output: none
-void
-OS_bWait(Sema4Type *semaPt);
-
-// ******** OS_bSignal ************
-// Lab2 spinlock, set to 1
-// Lab3 wakeup blocked thread if appropriate 
-// input:  pointer to a binary semaphore
-// output: none
-void
-OS_bSignal(Sema4Type *semaPt);
 
 //******** OS_AddThread *************** 
 // add a foregound thread to the scheduler

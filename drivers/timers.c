@@ -11,7 +11,7 @@ extern void
 ContextSwitch(void);
 
 extern void
-(*PeriodicTask)(void);
+OS_CallBackgroundTask(uint8_t taskID);
 
 /*
  * Datasheet Bookmarks:
@@ -58,10 +58,6 @@ void
 Timer0IntHandler(void) {
     // Page 722 of datasheet
     TIMER0_ICR_R = set_bit_field_u32(TIMER0_ICR_R, 0, 1, 0b1); //  8) Clear interrupt
-
-//    osTimeMs++;
-//
-//    OS_UpdateSleep();
 }
 
 void
@@ -83,7 +79,7 @@ void
 Timer1IntHandler(void) {
     TIMER1_ICR_R = set_bit_field_u32(TIMER1_ICR_R, 0, 1, 0b1); // Clear interrupt
 
-    (*PeriodicTask)();
+    (*OS_CallBackgroundTask)(2);
 }
 
 // Using this as a OS high resolution system timer
@@ -130,5 +126,28 @@ Timer3IntHandler(void) {
     osTimeMs++;
 
     OS_UpdateSleep();
+}
+
+// Using this as a OS high resolution system timer
+void
+Timer4Init(uint32_t period, uint32_t priority) {
+    // Page 722 of datasheet
+    SYSCTL_RCGCTIMER_R |= 0x10;
+    TIMER4_CTL_R = set_bit_field_u32(TIMER4_CTL_R, 0, 1, 0);            //  1) Disable timer
+    TIMER4_CFG_R = 0;                                                   //  2) Set to 32-bit mode
+    TIMER4_TAMR_R = set_bit_field_u32(TIMER4_TAMR_R, 0, 2, 0b10);       //  3b) Set timer A to Periodic Mode
+    TIMER4_TAMR_R = set_bit_field_u32(TIMER4_TAMR_R, 4, 1, 0b1);        //  4) Set timer A to count up
+    TIMER4_TAILR_R = period;                                            //  5) Set reload value
+    TIMER4_IMR_R = set_bit_field_u32(TIMER4_IMR_R, 0, 1, 1);            //  6) Enable timer A time-out interrupt
+    Interrupt_SetPriority(70, priority);
+    Interrupt_Enable(70);
+    TIMER4_CTL_R = set_bit_field_u32(TIMER4_CTL_R, 0, 1, 1);            //  7) Enable timer and start counting
+}
+
+void
+Timer4IntHandler(void) {
+    TIMER4_ICR_R = set_bit_field_u32(TIMER4_ICR_R, 0, 1, 0b1); // Clear interrupt
+
+    (*OS_CallBackgroundTask)(3);
 }
 

@@ -580,15 +580,15 @@ static int i=0;
   if(i==50){
     i = 0;         //every 50 ms
     Count1++;
-    OS_bSignal(&Readye);
+    OS_Signal(&Readye);
   }
 }
 void Thread2e(void){
-  OS_InitSemaphore(&Readye,0);
+  OS_InitSemaphore(&Readye,-1);
   Count1 = 0;          
   Count2 = 0;          
   for(;;){
-    OS_bWait(&Readye);
+    OS_Wait(&Readye);
     Count2++;     // Count2 should be equal to Count1
   }
 }
@@ -860,5 +860,6 @@ int TestmainFIFO(void){   // TestmainFIFO
 
 //*******************Trampoline for selecting main to execute**********
 int main(void) { 			// main 
-  realmain();
+//  realmain();
+    Testmain1();
 }

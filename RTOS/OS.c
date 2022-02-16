@@ -27,6 +27,12 @@
 #include "launchpad.h"
 #include "timers.h"
 
+#define ROUND_ROBIN_SCHEDULING
+
+#ifndef ROUND_ROBIN_SCHEDULING
+#define PRIORITY_SCHEDULING
+#endif
+
 #define LAUNCHPAD_BUTTON_DEBOUNCE_MS 100u
 
 #define OS_FIFO_SIZE 128u
@@ -37,7 +43,19 @@ extern void
 StartOS(void);
 
 void
-(*PeriodicTask)(void);
+(*BackgroundPeriodicTask1)(void);
+
+void
+(*BackgroundPeriodicTask2)(void);
+
+void
+(*SW1Task)(void);
+
+void
+(*SW2Task)(void);
+
+Sema4Type backgroundTaskStateMutex;
+bool backgroundTaskRunning;
 
 // Performance Measurements 
 int32_t MaxJitter;             // largest time jitter between interrupts in usec
@@ -95,6 +113,12 @@ OS_Init(void) {
     }
 
     threadCount = 0;
+    BackgroundPeriodicTask1 = NULL;
+    BackgroundPeriodicTask2 = NULL;
+    RunPt = NULL;
+
+    OS_InitSemaphore(&backgroundTaskStateMutex, 0);
+    backgroundTaskRunning = false;
 
     // Set PendSV priority
     Interrupt_SetSystemPriority(14, 7u);
@@ -106,6 +130,50 @@ OS_Init(void) {
     Timer2Init(0xFFFFFFFF, 7);
 }
 
+// Inserts second in between first and third
+static inline void
+linkTCBs(TCBPtr first, TCBPtr second, TCBPtr third) {
+    first->TCB_next = second;
+    second->TCB_previous = first;
+    second->TCB_next = third;
+    third->TCB_previous = second;
+}
+
+/* Removes TCB from its doubly-linked list
+ * Returns true if successful
+ * Returns false if failure because of list size of 1, requires further processing
+ */
+static inline bool
+unlinkTCB(TCBPtr tcb) {
+    bool rv;
+
+    if (tcb->TCB_next != tcb) {
+        tcb->TCB_previous->TCB_next = tcb->TCB_next;
+        tcb->TCB_next->TCB_previous = tcb->TCB_previous;
+        rv = true;
+    } else {
+        rv = false;
+    }
+
+    return rv;
+}
+
+#ifdef PRIORITY_SCHEDULING
+/* Returns the pointer to the first TCB in the TCB linked list that
+ * has a priority less than the given priority
+ */
+static inline TCBPtr
+getPriorityTail(TCBPtr tcb, int priority) {
+    // return tcb directly if list size is only 1
+    if(tcb->TCB_next != tcb) {
+        while (tcb->priority >= priority) {
+            tcb = tcb->TCB_next;
+        }
+    }
+    return tcb;
+}
+#endif
+
 // ******** OS_InitSemaphore ************
 // initialize semaphore 
 // input:  pointer to a semaphore
@@ -115,6 +183,7 @@ OS_InitSemaphore(Sema4Type *semaPt, int32_t value) {
     // put Lab 2 (and beyond) solution here
     uint32_t sr = StartCritical();
     semaPt->Value = value;
+    semaPt->blockedHead = NULL;
     EndCritical(sr);
 }
 
@@ -129,12 +198,41 @@ OS_Wait(Sema4Type *semaPt) {
     // put Lab 2 (and beyond) solution here
     uint32_t sr = StartCritical();
 
-    while (semaPt->Value <= 0) {
-        EnableInterrupts();
-        OS_Suspend();
-        DisableInterrupts();
-    }
     semaPt->Value--;
+
+    if (semaPt->Value <= 0) {
+        // resource busy, block thread
+        RunPt->blocked_state = 1;
+
+        // Remove RunPt from active list
+        bool lastTCBInList = unlinkTCB(RunPt);
+        if (lastTCBInList) {
+            RunPt = NULL;
+        }
+
+        if (semaPt->blockedHead == NULL) {
+            // No existing block list on this semaphore. Simply make it the head.
+            semaPt->blockedHead = RunPt;
+            linkTCBs(semaPt->blockedHead, semaPt->blockedHead,
+                    semaPt->blockedHead);
+        } else {
+            // Block list exists. Find where to insert it, then insert it.
+#ifdef ROUND_ROBIN_SCHEDULING
+            linkTCBs(semaPt->blockedHead->TCB_previous, RunPt,
+                    semaPt->blockedHead);
+#endif
+#ifdef PRIORITY_SCHEDULING
+            // Block list is sorted by priority
+            TCBPtr tail = getPriorityTail(semaPt->blockedHead, RunPt->priority);
+
+            // Insert RunPt into chain in front of priority tail
+            linkTCBs(tail->TCB_previous, RunPt, tail);
+#endif
+        }
+        OS_Scheduler();
+        OS_Suspend();
+    }
+
     EndCritical(sr);
 }
 
@@ -152,42 +250,42 @@ OS_Signal(Sema4Type *semaPt) {
 
     semaPt->Value++;
 
-    EndCritical(sr);
-}
+    if (semaPt->Value <= 0) {
+        // a task is currently awaiting this recently freed resource. unblock that task!
+        TCBPtr taskToWake = semaPt->blockedHead;
+        taskToWake->blocked_state = 0;
 
-// ******** OS_bWait ************
-// Lab2 spinlock, set to 0
-// Lab3 block if less than zero
-// input:  pointer to a binary semaphore
-// output: none
-void
-OS_bWait(Sema4Type *semaPt) {
-    // put Lab 2 (and beyond) solution here
-    uint32_t sr = StartCritical();
+        // remove taskToWake from blocked list
+        bool lastTCBInList = unlinkTCB(taskToWake);
+        if (lastTCBInList) {
+            semaPt->blockedHead = NULL;
+        }
 
-    while (semaPt->Value == 0) {
-        EnableInterrupts();
-        OS_Suspend();
-        DisableInterrupts();
+        if(RunPt == NULL) {
+            // Everything else is sleeping or blocked
+            RunPt = taskToWake;
+            linkTCBs(RunPt, RunPt, RunPt);
+        } else {
+            // Add taskToWake to active list
+#ifdef ROUND_ROBIN_SCHEDULING
+            linkTCBs(RunPt->TCB_previous, taskToWake, RunPt);
+#endif
+
+#ifdef PRIORITY_SCHEDULING
+            TCBPtr tail = getPriorityTail(RunPt, taskToWake->priority);
+
+            // Insert taskToWake into chain in front of priority tail
+            linkTCBs(tail->TCB_previous, taskToWake, tail);
+
+            /* If using priority scheduling, suspend execution if we
+             * woke up a higher priority thread
+             */
+            if(!backgroundTaskRunning && taskToWake->priority > RunPt->priority) {
+                OS_Suspend();
+            }
+        }
+#endif
     }
-
-    semaPt->Value = 0;
-
-    EndCritical(sr);
-}
-
-// ******** OS_bSignal ************
-// Lab2 spinlock, set to 1
-// Lab3 wakeup blocked thread if appropriate 
-// input:  pointer to a binary semaphore
-// output: none
-void
-OS_bSignal(Sema4Type *semaPt) {
-    // put Lab 2 (and beyond) solution here
-
-    int32_t sr = StartCritical();
-
-    semaPt->Value = 1;
 
     EndCritical(sr);
 }
@@ -207,7 +305,6 @@ OS_AddThread(void
     // put Lab 2 (and beyond) solution here
     int rv = 1;
     int listIndex = -1;
-    TCBPtr lastTCB;
     TCBPtr tcbPtr = NULL;
 
     // CRITICAL SECTION
@@ -246,7 +343,7 @@ OS_AddThread(void
     tcbPtr->stack_pointer =
             (uintptr_t) &stack[listIndex][THREAD_STACK_SIZE - 16];
     tcbPtr->sleep_state = 0;
-    tcbPtr->blocked_state = 0; // ???? TODO
+    tcbPtr->blocked_state = 0;
 
     // initialize this newly generated task's stack
     stack[listIndex][THREAD_STACK_SIZE - 1] = 0x01000000;                // PSR
@@ -267,23 +364,23 @@ OS_AddThread(void
     stack[listIndex][THREAD_STACK_SIZE - 16] = 0x04040404;                // R4
 
     threadCount++;
-    if (threadCount == 1) {
+    if (RunPt == NULL) {
         // first thread, set RunPt
         RunPt = tcbPtr;
-        RunPt->TCB_next = RunPt;
-        RunPt->TCB_previous = RunPt;
+        linkTCBs(RunPt, RunPt, RunPt);
     } else {
-        // starting from RunPt, search for the last TCB in line
-        lastTCB = RunPt;
-        while (lastTCB->TCB_next != RunPt) {
-            lastTCB = lastTCB->TCB_next;
-        }
+        // add TCB to active list
+#ifdef ROUND_ROBIN_SCHEDULING
+        // insert the new TCB behind RunPt
+        linkTCBs(RunPt->TCB_previous, tcbPtr, RunPt);
+#endif
 
-        // insert the new TCB behind lastTCB and in front of RunPt
-        lastTCB->TCB_next = tcbPtr;
-        tcbPtr->TCB_previous = lastTCB;
-        tcbPtr->TCB_next = RunPt;
-        RunPt->TCB_previous = tcbPtr;
+#ifdef PRIORITY_SCHEDULING
+        TCBPtr tail = getPriorityTail(RunPt, tcbPtr->priority);
+
+        // Insert tcbPtr into chain in front of priority tail
+        linkTCBs(tail->TCB_previous, tcbPtr, tail);
+#endif
     }
 
 exit:
@@ -302,7 +399,23 @@ OS_UpdateSleep(void) {
 
             // Check if just finished sleeping
             if (tcbPtr->sleep_state == 0) {
-                //TODO
+                if(RunPt == NULL) {
+                    // Everything else is also sleeping or blocked
+                    RunPt = tcbPtr;
+                    linkTCBs(RunPt, RunPt, RunPt);
+                } else {
+#ifdef ROUND_ROBIN_SCHEDULING
+                    // insert the new TCB behind RunPt
+                    linkTCBs(RunPt->TCB_previous, tcbPtr, RunPt);
+#endif
+
+#ifdef PRIORITY_SCHEDULING
+                    TCBPtr tail = getPriorityTail(RunPt, tcbPtr->priority);
+
+                    // Insert tcbPtr into chain in front of priority tail
+                    linkTCBs(tail->TCB_previous, tcbPtr, tail);
+#endif
+                }
             }
         }
     }
@@ -337,7 +450,29 @@ OS_Id(void) {
 
     return RunPt->id;
 }
-;
+
+void OS_CallBackgroundTask(uint8_t taskID) {
+    OS_Wait(&backgroundTaskStateMutex);
+    bool lastBackgroundTaskRunningState = backgroundTaskRunning;
+    backgroundTaskRunning = true;
+    OS_Signal(&backgroundTaskStateMutex);
+
+    if(taskID == 0) {
+        // Switch 1 Task
+        (*SW1Task)();
+    } else if(taskID == 1) {
+        // Switch 2 Task
+        (*SW2Task)();
+    } else if(taskID == 2) {
+        // Periodic Thread 1
+        (*BackgroundPeriodicTask1)();
+    } else if(taskID == 3) {
+        // Periodic Thread 2
+        (*BackgroundPeriodicTask2)();
+    }
+
+    backgroundTaskRunning = lastBackgroundTaskRunningState;
+}
 
 //******** OS_AddPeriodicThread *************** 
 // add a background periodic task
@@ -364,9 +499,13 @@ OS_AddPeriodicThread(void
     uint32_t sr = StartCritical();
     int rv = 1;
 
-    PeriodicTask = task;
-
-    Timer1Init(period, priority);
+    if(BackgroundPeriodicTask1 == NULL) {
+        BackgroundPeriodicTask1 = task;
+        Timer1Init(period, priority);
+    } else {
+        BackgroundPeriodicTask2 = task;
+        Timer4Init(period, priority);
+    }
 
     EndCritical(sr);
     return rv; // replace this line with solution
@@ -376,10 +515,6 @@ OS_AddPeriodicThread(void
  PF1 Interrupt Handler
  *----------------------------------------------------------------------------*/
 #define OS_DEBOUNCE (false)
-void
-(*SW1Task)(void);
-void
-(*SW2Task)(void);
 uint32_t lastPF0EdgeInterrupt = 0, lastPF4EdgeInterrupt = 0;
 void
 GPIOPortF_Handler(void) {
@@ -387,12 +522,12 @@ GPIOPortF_Handler(void) {
     if (GPIO_PORTF_RIS_R & (1u << 0u)) {
         // PF0
         GPIO_ClearInterruptStatus(PORT_F, 0);
-        if (!OS_DEBOUNCE || ms - lastPF0EdgeInterrupt > LAUNCHPAD_BUTTON_DEBOUNCE_MS) {
+        if (!OS_DEBOUNCE
+                || ms - lastPF0EdgeInterrupt > LAUNCHPAD_BUTTON_DEBOUNCE_MS) {
             lastPF0EdgeInterrupt = ms;
 
             if (SW2Task != NULL) {
-//                OS_AddThread(SW2Task, 128, SW2Task_Priority);
-                (*SW2Task)();
+                OS_CallBackgroundTask(1);
             }
         }
     } else if (!OS_DEBOUNCE || GPIO_PORTF_RIS_R & (1u << 4u)) {
@@ -402,8 +537,7 @@ GPIOPortF_Handler(void) {
             lastPF4EdgeInterrupt = ms;
 
             if (SW1Task != NULL) {
-//                OS_AddThread(SW1Task, 128, SW2Task_Priority);
-                (*SW1Task)();
+                OS_CallBackgroundTask(0);
             }
         }
     }
@@ -470,6 +604,9 @@ OS_Sleep(uint32_t sleepTime) {
 
     RunPt->sleep_state = sleepTime;
 
+    // Remove from active list
+    unlinkTCB(RunPt);
+
     EndCritical(sr);
     OS_Suspend();
 
@@ -485,8 +622,7 @@ OS_Kill(void) {
     uint32_t sr = StartCritical();
 
     // Remove RunPt from TCB Chain
-    RunPt->TCB_previous->TCB_next = RunPt->TCB_next;
-    RunPt->TCB_next->TCB_previous = RunPt->TCB_previous;
+    unlinkTCB(RunPt);
 
     // Deactivate RunPt's ID to indicate death
     RunPt->id = -1;
@@ -507,7 +643,7 @@ void
 OS_Suspend(void) {
     // put Lab 2 (and beyond) solution here
     NVIC_ST_CURRENT_R = 0;          // reset SysTick timer
-    NVIC_INT_CTRL_R = set_bit_field_u32(NVIC_INT_CTRL_R, 26, 1, 1);   // trigger SysTick handler
+    NVIC_INT_CTRL_R = set_bit_field_u32(NVIC_INT_CTRL_R, 26, 1, 1); // trigger SysTick handler
 }
 ;
 
@@ -612,8 +748,8 @@ static uint32_t Mailbox_Data;
 void
 OS_MailBox_Init(void) {
     // put Lab 2 (and beyond) solution here
-    OS_InitSemaphore(&Mailbox_DataValid, 0);
-    OS_InitSemaphore(&Mailbox_BoxFree, 1);
+    OS_InitSemaphore(&Mailbox_DataValid, -1);
+    OS_InitSemaphore(&Mailbox_BoxFree, 0);
 }
 ;
 
@@ -626,9 +762,9 @@ OS_MailBox_Init(void) {
 void
 OS_MailBox_Send(uint32_t data) {
     // put Lab 2 (and beyond) solution here
-    OS_bWait(&Mailbox_BoxFree);
+    OS_Wait(&Mailbox_BoxFree);
     Mailbox_Data = data;
-    OS_bSignal(&Mailbox_DataValid);
+    OS_Signal(&Mailbox_DataValid);
 
 }
 ;
@@ -644,9 +780,9 @@ OS_MailBox_Recv(void) {
     // put Lab 2 (and beyond) solution here
     uint32_t rv;
 
-    OS_bWait(&Mailbox_DataValid);
+    OS_Wait(&Mailbox_DataValid);
     rv = Mailbox_Data;
-    OS_bSignal(&Mailbox_BoxFree);
+    OS_Signal(&Mailbox_BoxFree);
 
     return rv;
 }
@@ -731,8 +867,6 @@ OS_Launch(uint32_t theTimeSlice) {
         goto exit;
     }
 
-    // TODO Set RunPt to point to highest priority
-
     SysTick_Init(theTimeSlice);
     StartOS();
 
@@ -742,12 +876,13 @@ exit:
 
 void
 OS_Scheduler(void) {
-    // TODO Set NextRunPt to point to highest priority
-    NextRunPt = RunPt->TCB_next;
 
-    // Cannot run a sleeping thread, find a thread that is awake
-    while (NextRunPt->sleep_state > 0) {
-        NextRunPt = NextRunPt->TCB_next;
+    // If everything is blocked/sleeping, go to idle task
+    if(RunPt == NULL) {
+        // TODO go to idle task
+    }
+    else {
+        NextRunPt = RunPt->TCB_next;
     }
 }
 

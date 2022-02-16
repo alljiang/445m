@@ -830,7 +830,7 @@ void ST7735_InitB(void) {
   ST7735_SetCursor(0,0);
   StTextColor = ST7735_YELLOW;
   ST7735_FillScreen(0);                 // set screen to black
-  OS_InitSemaphore(&LCDFree,1);  // means LCD free
+  OS_InitSemaphore(&LCDFree,0);         // means LCD free
 }
 
 
@@ -859,7 +859,7 @@ void ST7735_InitR(enum initRFlags option) {
   ST7735_SetCursor(0,0);
   StTextColor = ST7735_YELLOW;
   ST7735_FillScreen(0);                 // set screen to black
-  OS_InitSemaphore(&LCDFree,1);  // means LCD free
+  OS_InitSemaphore(&LCDFree, 0);          // means LCD free
 }
 
 
@@ -1417,7 +1417,7 @@ void ST7735_OutUDec2(uint32_t n, uint32_t l){
 
 char buffer[40];
 void ST7735_Message(uint32_t  d, uint32_t  l, char *pt, int32_t value){
-    OS_bWait(&LCDFree);
+    OS_Wait(&LCDFree);
     int i = 0;
 
     // write this as part of Labs 1 and 2
@@ -1436,7 +1436,7 @@ void ST7735_Message(uint32_t  d, uint32_t  l, char *pt, int32_t value){
 
     uint32_t charCount = ST7735_DrawString(0, line, buffer, 0xFFFF);
     ST7735_ClearLine(charCount, line, 0);
-    OS_bSignal(&LCDFree);
+    OS_Signal(&LCDFree);
 }
 
 //-----------------------ST7735_OutUDec4-----------------------
