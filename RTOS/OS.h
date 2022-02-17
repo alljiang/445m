@@ -14,6 +14,7 @@
 #ifndef __OS_H
 #define __OS_H  1
 #include <stdint.h>
+#include <stdbool.h>
 
 /**
  * \brief Times assuming a 80 MHz
@@ -312,7 +313,7 @@ OS_Launch(uint32_t theTimeSlice);
 // scheduler for the RTOS
 // no inputs, no outputs
 void
-OS_Scheduler();
+OS_Scheduler(bool unlinkFailed);
 
 /**
  * @details open the file for writing, redirect stream I/O (printf) to this file

@@ -44,6 +44,9 @@
 #include "RTOS/Interpreter.h"
 #include "RTOS/ST7735.h"
 
+#include "gpio.h"
+#include "launchpad.h"
+
 
 //*********Prototype for FFT in cr4_fft_64_stm32.s, STMicroelectronics
 void cr4_fft_64_stm32(void *pssOUT, void *pssIN, unsigned short Nbin);
@@ -860,6 +863,10 @@ int TestmainFIFO(void){   // TestmainFIFO
 
 //*******************Trampoline for selecting main to execute**********
 int main(void) { 			// main 
+    PLL_Init(Bus80MHz);
+    GPIO_Initialize();
+    Launchpad_PortFInitialize();
+
 //  realmain();
-    Testmain1();
+    Testmain4();
 }
