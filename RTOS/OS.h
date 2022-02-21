@@ -22,7 +22,9 @@
 #define TIME_1MS    80000          
 #define TIME_2MS    (2*TIME_1MS)  
 #define TIME_500US  (TIME_1MS/2)  
-#define TIME_250US  (TIME_1MS/5)  
+#define TIME_250US  (TIME_1MS/5)
+
+#define MAX_THREADS_COUNT 20
 
 // Lecture 3 Slide 16
 typedef struct TCB {
@@ -40,7 +42,7 @@ typedef TCB_t *TCBPtr;
  */
 struct Sema4 {
     int32_t Value;   // >0 means free, otherwise means busy
-    TCBPtr blockedHead;
+    TCBPtr blockList[MAX_THREADS_COUNT];    // arraylist
 };
 typedef struct Sema4 Sema4Type;
 
@@ -313,7 +315,7 @@ OS_Launch(uint32_t theTimeSlice);
 // scheduler for the RTOS
 // no inputs, no outputs
 void
-OS_Scheduler(bool unlinkFailed);
+OS_Scheduler();
 
 /**
  * @details open the file for writing, redirect stream I/O (printf) to this file

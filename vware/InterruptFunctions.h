@@ -1,8 +1,6 @@
 /*
  * InterruptFunctions.h
  *
- *  Created on: Feb 3, 2022
- *      Author: Allen
  */
 
 #ifndef RTOS_INTERRUPTFUNCTIONS_H_

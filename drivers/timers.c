@@ -30,7 +30,7 @@ SysTick_Init(unsigned long period) {
 
 void
 SysTick_Handler() {
-    OS_Scheduler(false);
+    OS_Scheduler();
     ContextSwitch();
 }
 
