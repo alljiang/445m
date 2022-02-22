@@ -112,6 +112,7 @@ uint32_t DASoutput;
 void
 DAS(void) {
     uint32_t input;
+    Launchpad_ToggleLED(LED_RED);
     if (NumSamples < RUNLENGTH) {   // finite time run
         PD0 ^= 0x01;
         input = ADC_In();           // channel set when calling ADC_Init
@@ -272,6 +273,7 @@ short Coeff[3] = { // PID coefficients
 short Actuator;
 void
 PID(void) {
+    Launchpad_ToggleLED(LED_BLUE);
     static short err = -1000;  // speed error, range -100 to 100 RPM
     Actuator = PID_stm32(err, Coeff) / 256;
     err++;
@@ -339,6 +341,8 @@ Idle(void) {
 int
 realmain(void) { // realmain
     OS_Init();        // initialize, disable interrupts
+    ST7735_InitR(INITR_GREENTAB);             // LCD initialization
+    UART_Init();                              // serial I/O for interpreter
     PortD_Init();     // debugging profile
     MaxJitter = 0;    // in 1us units
     DataLost = 0;     // lost data between producer and consumer
@@ -542,7 +546,6 @@ int Lost;
 void
 BackgroundThread1d(void) { // called at 1000 Hz
     Count1++;
-    Launchpad_ToggleLED(LED_RED);
     OS_Signal(&Readyd);
 }
 void
@@ -941,6 +944,6 @@ main(void) { 			// main
     GPIO_Initialize();
     Launchpad_PortFInitialize();
 
-//  realmain();
-    Testmain4();
+    realmain();
+//    Testmain4();
 }

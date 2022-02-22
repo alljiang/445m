@@ -90,9 +90,9 @@ Timer2Init(uint32_t period, uint32_t priority) {
     TIMER2_CTL_R = set_bit_field_u32(TIMER2_CTL_R, 0, 1, 0);            //  1) Disable timer
     TIMER2_CFG_R = 0;                                                   //  2) Set to 32-bit mode
     TIMER2_TAMR_R = set_bit_field_u32(TIMER2_TAMR_R, 0, 2, 0b10);       //  3b) Set timer A to Periodic Mode
-    TIMER2_TAMR_R = set_bit_field_u32(TIMER2_TAMR_R, 4, 1, 0b1);        //  4) Set timer A to count up
+    TIMER2_TAMR_R = set_bit_field_u32(TIMER2_TAMR_R, 4, 1, 0b0);        //  4) Set timer A to count down
     TIMER2_TAILR_R = period;                                            //  5) Set reload value
-    TIMER2_IMR_R = set_bit_field_u32(TIMER2_IMR_R, 0, 1, 0);            //  6) Disable timer A time-out interrupt
+    TIMER2_IMR_R = set_bit_field_u32(TIMER2_IMR_R, 0, 1, 1);            //  6) Disable timer A time-out interrupt
     Interrupt_SetPriority(23, priority);
     Interrupt_Enable(23);
     TIMER2_CTL_R = set_bit_field_u32(TIMER2_CTL_R, 0, 1, 1);            //  7) Enable timer and start counting
@@ -101,6 +101,8 @@ Timer2Init(uint32_t period, uint32_t priority) {
 void
 Timer2IntHandler(void) {
     TIMER2_ICR_R = set_bit_field_u32(TIMER2_ICR_R, 0, 1, 0b1); // Clear interrupt
+
+    (*OS_CallBackgroundTask)(3);
 }
 
 // Using this as a OS high resolution system timer
@@ -138,9 +140,9 @@ Timer4Init(uint32_t period, uint32_t priority) {
     TIMER4_TAMR_R = set_bit_field_u32(TIMER4_TAMR_R, 0, 2, 0b10);       //  3b) Set timer A to Periodic Mode
     TIMER4_TAMR_R = set_bit_field_u32(TIMER4_TAMR_R, 4, 1, 0b1);        //  4) Set timer A to count up
     TIMER4_TAILR_R = period;                                            //  5) Set reload value
-    TIMER4_IMR_R = set_bit_field_u32(TIMER4_IMR_R, 0, 1, 1);            //  6) Enable timer A time-out interrupt
-    Interrupt_SetPriority(70, priority);
-    Interrupt_Enable(70);
+    TIMER4_IMR_R = set_bit_field_u32(TIMER4_IMR_R, 0, 1, 0);            //  6) Enable timer A time-out interrupt
+//    Interrupt_SetPriority(70, priority);
+//    Interrupt_Enable(70);
     TIMER4_CTL_R = set_bit_field_u32(TIMER4_CTL_R, 0, 1, 1);            //  7) Enable timer and start counting
 }
 
@@ -148,6 +150,5 @@ void
 Timer4IntHandler(void) {
     TIMER4_ICR_R = set_bit_field_u32(TIMER4_ICR_R, 0, 1, 0b1); // Clear interrupt
 
-    (*OS_CallBackgroundTask)(3);
 }
 

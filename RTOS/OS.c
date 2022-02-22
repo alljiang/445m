@@ -17,8 +17,6 @@
 #include "vware/CortexM.h"
 #include "vware/PLL.h"
 #include "vware/LaunchPad.h"
-#include "vware/Timer4A.h"
-#include "vware/WTimer0A.h"
 #include "vware/ADCT0ATrigger.h"
 #include "vware/InterruptFunctions.h"
 #include "bit-utils.h"
@@ -127,7 +125,7 @@ OS_Init(void) {
     OS_ClearMsTime();
 
     // Start high res system timer
-    Timer2Init(0xFFFFFFFF, 7);
+    Timer4Init(0xFFFFFFFF, 7);
 }
 
 // Inserts second in between first and third
@@ -447,10 +445,10 @@ OS_Id(void) {
 // must be called within interrupt
 void
 OS_CallBackgroundTask(uint8_t taskID) {
-//    DisableInterrupts();
-//    bool lastBackgroundTaskRunningState = backgroundTaskRunning;
-//    backgroundTaskRunning = true;
-//    EnableInterrupts();
+    DisableInterrupts();
+    bool lastBackgroundTaskRunningState = backgroundTaskRunning;
+    backgroundTaskRunning = true;
+    EnableInterrupts();
 
     if (taskID == 0) {
         // Switch 1 Task
@@ -466,7 +464,7 @@ OS_CallBackgroundTask(uint8_t taskID) {
         (*BackgroundPeriodicTask2)();
     }
 
-//    backgroundTaskRunning = lastBackgroundTaskRunningState;
+    backgroundTaskRunning = lastBackgroundTaskRunningState;
 }
 
 //******** OS_AddPeriodicThread *************** 
@@ -499,7 +497,7 @@ OS_AddPeriodicThread(void
         Timer1Init(period, priority);
     } else {
         BackgroundPeriodicTask2 = task;
-        Timer4Init(period, priority);
+        Timer2Init(period, priority);
     }
 
     EndCritical(sr);
@@ -790,7 +788,7 @@ uint32_t
 OS_Time(void) {
     // put Lab 2 (and beyond) solution here
 
-    return TIMER2_TAR_R; // replace this line with solution
+    return TIMER4_TAR_R; // replace this line with solution
 }
 ;
 
