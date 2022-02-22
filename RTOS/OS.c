@@ -55,8 +55,6 @@ void
 void
 (*SW2Task)(void);
 
-bool backgroundTaskRunning;
-
 // Performance Measurements 
 int32_t MaxJitter;             // largest time jitter between interrupts in usec
 #define JITTERSIZE 64
@@ -115,8 +113,6 @@ OS_Init(void) {
     BackgroundPeriodicTask1 = NULL;
     BackgroundPeriodicTask2 = NULL;
     RunPt = NULL;
-
-    backgroundTaskRunning = false;
 
     // Set PendSV priority
     Interrupt_SetSystemPriority(14, 7u);
@@ -226,11 +222,6 @@ OS_Wait(Sema4Type *semaPt) {
         while (semaPt->blockList[index] != NULL
                 && semaPt->blockList[index]->priority <= RunPt->priority) {
             index++;
-
-            if (index >= MAX_THREADS_COUNT) {
-                // ERROR
-                while (1);
-            }
         }
 
         // scoot everything above index up by 1 to make room for index
@@ -289,7 +280,7 @@ OS_Signal(Sema4Type *semaPt) {
          * woke up a higher priority thread
          */
 
-        if (!backgroundTaskRunning && taskToWake->priority > RunPt->priority) {
+        if (taskToWake->priority < RunPt->priority) {
             OS_Suspend();
             EndCritical(sr);
             goto exit;
@@ -358,6 +349,8 @@ OS_AddThread(void
             (uintptr_t) &stack[listIndex][THREAD_STACK_SIZE - 16];
     tcbPtr->sleep_state = 0;
     tcbPtr->blocked_state = 0;
+    tcbPtr->priority = priority;
+    tcbPtr->last_serviced = -1;
 
     // initialize this newly generated task's stack
     stack[listIndex][THREAD_STACK_SIZE - 1] = 0x01000000;                // PSR
@@ -394,6 +387,12 @@ OS_AddThread(void
 
         // Insert tcbPtr into chain in front of priority tail
         linkTCBs(tail->TCB_previous, tcbPtr, tail);
+
+        // If RunPt is the tail, then change RunPt to point to the added TCB
+        // since RunPt should point to to highest priority TCB
+        if (tail == RunPt) {
+            RunPt = tail->TCB_previous;
+        }
 #endif
     }
 
@@ -447,11 +446,6 @@ OS_Id(void) {
 // must be called within interrupt
 void
 OS_CallBackgroundTask(uint8_t taskID) {
-    DisableInterrupts();
-    bool lastBackgroundTaskRunningState = backgroundTaskRunning;
-    backgroundTaskRunning = true;
-    EnableInterrupts();
-
     if (taskID == 0) {
         // Switch 1 Task
         (*SW1Task)();
@@ -465,8 +459,6 @@ OS_CallBackgroundTask(uint8_t taskID) {
         // Periodic Thread 2
         (*BackgroundPeriodicTask2)();
     }
-
-    backgroundTaskRunning = lastBackgroundTaskRunningState;
 }
 
 //******** OS_AddPeriodicThread *************** 
@@ -869,7 +861,8 @@ exit:
 // Should be called from within a critical section
 void
 OS_Scheduler() {
-    TCBPtr priorityHead, runCandidatePriority, runCandidateRoundRobin;
+    TCBPtr priorityHead, runCandidatePriority, runCandidateRoundRobin, search, start;
+    int earliestServiceTime = 2147483647;
 
     if (RunPt->id == -1 && RunPt->TCB_next == RunPt) {
         // Removal of RunPt from active list will fail because it is the only one in the list
@@ -895,7 +888,7 @@ OS_Scheduler() {
 #endif
 
 #ifdef PRIORITY_SCHEDULING
-    // First, the active list is sorted by priority. Find the highest, which is the head of the list.
+    // First, the list is sorted by priority. Find the highest, which is the head of the list.
     priorityHead = RunPt;
     while (priorityHead->TCB_previous->priority <= priorityHead->priority
             && priorityHead->TCB_previous != RunPt) {
@@ -905,6 +898,10 @@ OS_Scheduler() {
     //  The priority head should just be RunPt if RunPt already has the highest priority
     if (priorityHead->priority == RunPt->priority) {
         priorityHead = RunPt;
+    }
+
+    if (priorityHead->blocked_state != 0 && RunPt->id == 1) {
+        volatile int asdf = 1;
     }
 
     // Next, search for the next non-sleeping/unblocked TCB that has the highest priority
@@ -921,15 +918,42 @@ OS_Scheduler() {
         runCandidateRoundRobin = runCandidateRoundRobin->TCB_next;
     }
 
-    if (runCandidateRoundRobin->priority >= runCandidatePriority->priority) {
-        NextRunPt = runCandidateRoundRobin;
-    } else {
+    if (runCandidateRoundRobin->priority <= runCandidatePriority->priority) {
+            // bounded waiting - for all unblocked TCBs of the same priority,
+            // choose the one that hasn't been serviced for longest
+            search = runCandidateRoundRobin->TCB_next;
+            start = runCandidateRoundRobin;
+            while (search != start) {
+                if (search->priority != start->priority
+                        || search->blocked_state != 0
+                        || search->sleep_state > 0) {
+                    search = search->TCB_next;
+                    continue;
+                }
+
+                if (search->last_serviced < earliestServiceTime) {
+                    runCandidateRoundRobin = search;
+                    earliestServiceTime = search->last_serviced;
+                }
+                search = search->TCB_next;
+            }
+
+            NextRunPt = runCandidateRoundRobin;
+
+        } else {
         NextRunPt = runCandidatePriority;
     }
 #endif
 
     if (RunPt->id == -1) {
         unlinkTCB(RunPt);
+    }
+
+    NextRunPt->last_serviced = OS_MsTime();
+
+    // verification test
+    if (NextRunPt->id == 2) {
+        volatile int safdfsad = 1;
     }
 
 exit:

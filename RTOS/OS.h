@@ -32,6 +32,7 @@ typedef struct TCB {
     struct TCB *TCB_previous, *TCB_next;
     int id;
     long sleep_state;
+    int last_serviced;     // ms
     int priority;           // lab 3
     int blocked_state;   // lab 3
 } TCB_t;

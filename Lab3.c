@@ -112,7 +112,6 @@ uint32_t DASoutput;
 void
 DAS(void) {
     uint32_t input;
-    Launchpad_ToggleLED(LED_RED);
     if (NumSamples < RUNLENGTH) {   // finite time run
         PD0 ^= 0x01;
         input = ADC_In();           // channel set when calling ADC_Init
@@ -273,7 +272,6 @@ short Coeff[3] = { // PID coefficients
 short Actuator;
 void
 PID(void) {
-    Launchpad_ToggleLED(LED_BLUE);
     static short err = -1000;  // speed error, range -100 to 100 RPM
     Actuator = PID_stm32(err, Coeff) / 256;
     err++;
@@ -945,5 +943,5 @@ main(void) { 			// main
     Launchpad_PortFInitialize();
 
 //    realmain();
-    Testmain3();
+    Testmain4();
 }
