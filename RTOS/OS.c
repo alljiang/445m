@@ -25,7 +25,7 @@
 #include "launchpad.h"
 #include "timers.h"
 
-#define ROUND_ROBIN_SCHEDULING
+//#define ROUND_ROBIN_SCHEDULING
 
 #ifndef ROUND_ROBIN_SCHEDULING
 #define PRIORITY_SCHEDULING
@@ -158,13 +158,15 @@ unlinkTCB(TCBPtr tcb) {
 
 #ifdef PRIORITY_SCHEDULING
 /* Returns the pointer to the first TCB in the TCB linked list that
- * has a priority less than the given priority
+ * has a priority lower than the given priority
  */
 static inline TCBPtr
 getPriorityTail(TCBPtr tcb, int priority) {
+    TCBPtr head = tcb;
+
     // return tcb directly if list size is only 1
-    if(tcb->TCB_next != tcb) {
-        while (tcb->priority >= priority) {
+    while (tcb->TCB_next != head) {
+        if (tcb->priority <= priority) {
             tcb = tcb->TCB_next;
         }
     }
@@ -221,19 +223,19 @@ OS_Wait(Sema4Type *semaPt) {
 #endif
 
 #ifdef PRIORITY_SCHEDULING
-        while(semaPt->blockList[index] != NULL &&
-                semaPt->blockList[index] <= RunPt->priority) {
+        while (semaPt->blockList[index] != NULL
+                && semaPt->blockList[index]->priority <= RunPt->priority) {
             index++;
 
-            if(index >= MAX_THREADS_COUNT) {
+            if (index >= MAX_THREADS_COUNT) {
                 // ERROR
-                while(1);
+                while (1);
             }
         }
 
         // scoot everything above index up by 1 to make room for index
-        for(int i = MAX_THREADS_COUNT - 1; i > index; i--) {
-            semaPt->blockList[i] = semaPt->blockList[i-1];
+        for (int i = MAX_THREADS_COUNT - 1; i > index; i--) {
+            semaPt->blockList[i] = semaPt->blockList[i - 1];
         }
 #endif
 
@@ -287,7 +289,7 @@ OS_Signal(Sema4Type *semaPt) {
          * woke up a higher priority thread
          */
 
-        if(!backgroundTaskRunning && taskToWake->priority > RunPt->priority) {
+        if (!backgroundTaskRunning && taskToWake->priority > RunPt->priority) {
             OS_Suspend();
             EndCritical(sr);
             goto exit;
@@ -867,6 +869,8 @@ exit:
 // Should be called from within a critical section
 void
 OS_Scheduler() {
+    TCBPtr priorityHead, runCandidatePriority, runCandidateRoundRobin;
+
     if (RunPt->id == -1 && RunPt->TCB_next == RunPt) {
         // Removal of RunPt from active list will fail because it is the only one in the list
         // In this case, wait until either RunPt is initialized by another thread
@@ -892,25 +896,28 @@ OS_Scheduler() {
 
 #ifdef PRIORITY_SCHEDULING
     // First, the active list is sorted by priority. Find the highest, which is the head of the list.
-    TCBPtr priorityHead = RunPt;
-    while(priorityHead->TCB_previous->priority <= priorityHead->priority && priorityHead->TCB_previous != RunPt) {
+    priorityHead = RunPt;
+    while (priorityHead->TCB_previous->priority <= priorityHead->priority
+            && priorityHead->TCB_previous != RunPt) {
         priorityHead = priorityHead->TCB_previous;
     }
 
     //  The priority head should just be RunPt if RunPt already has the highest priority
-    if(priorityHead->priority == RunPt->priority) {
+    if (priorityHead->priority == RunPt->priority) {
         priorityHead = RunPt;
     }
 
     // Next, search for the next non-sleeping/unblocked TCB that has the highest priority
-    TCBPtr runCandidatePriority = priorityHead;
-    while(runCandidatePriority->blocked_state != 0 || runCandidatePriority->sleep_state > 0) {
+    runCandidatePriority = priorityHead;
+    while (runCandidatePriority->blocked_state != 0
+            || runCandidatePriority->sleep_state > 0) {
         runCandidatePriority = runCandidatePriority->TCB_next;
     }
 
     // Also consider the next TCB in line
-    TCBPtr runCandidateRoundRobin = RunPt->NextRunPt;
-    while (runCandidateRoundRobin->sleep_state > 0 || runCandidateRoundRobin->blocked_state != 0) {
+    runCandidateRoundRobin = RunPt->TCB_next;
+    while (runCandidateRoundRobin->sleep_state > 0
+            || runCandidateRoundRobin->blocked_state != 0) {
         runCandidateRoundRobin = runCandidateRoundRobin->TCB_next;
     }
 
@@ -919,7 +926,7 @@ OS_Scheduler() {
     } else {
         NextRunPt = runCandidatePriority;
     }
-    #endif
+#endif
 
     if (RunPt->id == -1) {
         unlinkTCB(RunPt);

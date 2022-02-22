@@ -944,6 +944,6 @@ main(void) { 			// main
     GPIO_Initialize();
     Launchpad_PortFInitialize();
 
-    realmain();
-//    Testmain4();
+//    realmain();
+    Testmain3();
 }
