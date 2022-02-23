@@ -649,7 +649,7 @@ Thread4e(void) {
     int i;
     for (i = 0; i < 640; i++) {
         Count4++;     // Count4 should increase on button press
-        OS_Sleep(1);
+        OS_Sleep(2);
     }
     OS_Kill();
 }
@@ -943,5 +943,5 @@ main(void) { 			// main
     Launchpad_PortFInitialize();
 
 //    realmain();
-    Testmain4();
+    Testmain5();
 }

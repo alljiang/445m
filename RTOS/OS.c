@@ -861,8 +861,10 @@ exit:
 // Should be called from within a critical section
 void
 OS_Scheduler() {
+#ifdef PRIORITY_SCHEDULING
     TCBPtr priorityHead, runCandidatePriority, runCandidateRoundRobin, search, start;
     int earliestServiceTime = 2147483647;
+#endif
 
     if (RunPt->id == -1 && RunPt->TCB_next == RunPt) {
         // Removal of RunPt from active list will fail because it is the only one in the list
@@ -900,10 +902,6 @@ OS_Scheduler() {
         priorityHead = RunPt;
     }
 
-    if (priorityHead->blocked_state != 0 && RunPt->id == 1) {
-        volatile int asdf = 1;
-    }
-
     // Next, search for the next non-sleeping/unblocked TCB that has the highest priority
     runCandidatePriority = priorityHead;
     while (runCandidatePriority->blocked_state != 0
@@ -922,6 +920,7 @@ OS_Scheduler() {
             // bounded waiting - for all unblocked TCBs of the same priority,
             // choose the one that hasn't been serviced for longest
             search = runCandidateRoundRobin->TCB_next;
+            earliestServiceTime = search->last_serviced;
             start = runCandidateRoundRobin;
             while (search != start) {
                 if (search->priority != start->priority
@@ -939,8 +938,7 @@ OS_Scheduler() {
             }
 
             NextRunPt = runCandidateRoundRobin;
-
-        } else {
+    } else {
         NextRunPt = runCandidatePriority;
     }
 #endif
