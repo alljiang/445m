@@ -74,9 +74,9 @@ uint32_t CPUUtil;       // calculated CPU utilization (in 0.01%)
 
 //---------------------User debugging-----------------------
 uint32_t DataLost;     // data sent by Producer, but not received by Consumer
-extern int32_t MaxJitter;      // largest time jitter between interrupts in usec
-extern uint32_t const JitterSize;
-extern uint32_t JitterHistogram[];
+extern int32_t MaxJitter, MaxJitter2;      // largest time jitter between interrupts in usec
+extern uint32_t const JitterSize, JitterSize2;
+extern uint32_t JitterHistogram[], JitterHistogram2[];
 
 #define PD0  (*((volatile uint32_t *)0x40007004))
 #define PD1  (*((volatile uint32_t *)0x40007008))
@@ -152,7 +152,7 @@ ButtonWork(void) {
 void
 SW1Push(void) {
     if (OS_MsTime() > 20) { // debounce
-        if (OS_AddThread(&ButtonWork, 100, 2)) {
+        if (OS_AddThread(&ButtonWork, 128, 2)) {
             NumCreated++;
         }
         OS_ClearMsTime();  // at least 20ms between touches
@@ -166,7 +166,7 @@ SW1Push(void) {
 void
 SW2Push(void) {
     if (OS_MsTime() > 20) { // debounce
-        if (OS_AddThread(&ButtonWork, 100, 2)) {
+        if (OS_AddThread(&ButtonWork, 128, 2)) {
             NumCreated++;
         }
         OS_ClearMsTime();  // at least 20ms between touches
@@ -712,7 +712,7 @@ Thread7(void) {  // foreground thread
     UART_OutString("\n\rEE345M/EE380L, Lab 3 Procedure 2\n\r");
     OS_Sleep(5000);   // 10 seconds
     Jitter(MaxJitter, JitterSize, JitterHistogram);  // print jitter information
-    //Jitter(MaxJitter2, JitterSize2, JitterHistogram2);  // print jitter of second thread
+    Jitter(MaxJitter2, JitterSize2, JitterHistogram2);  // print jitter of second thread
     UART_OutString("\n\r\n\r");
     OS_Kill();
 }
@@ -736,6 +736,7 @@ TaskB(void) {       // called every pB in background
 
 int
 Testmain6(void) {       // Testmain6 Lab 3
+    UART_Init();                              // serial I/O for interpreter
     PortD_Init();
     OS_Init();           // initialize, disable interrupts
     NumCreated = 0;
@@ -834,6 +835,7 @@ add(const int32_t n, const int32_t m) {
 int
 Testmain7(void) {      // Testmain7  Lab 3
     volatile uint32_t delay;
+    UART_Init();                              // serial I/O for interpreter
     OS_Init();           // initialize, disable interrupts
     delay = add(3, 4);
     PortD_Init();
@@ -942,6 +944,14 @@ main(void) { 			// main
     GPIO_Initialize();
     Launchpad_PortFInitialize();
 
-//    realmain();
-    Testmain5();
+//    Testmain1();
+//    Testmain2();
+//    Testmain3();
+//    Testmain4();
+//    Testmain5();
+//    Testmain6();
+//    Testmain7();
+//    TestmainFIFO();
+//    TestmainCS();
+    realmain();
 }

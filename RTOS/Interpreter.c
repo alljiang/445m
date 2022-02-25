@@ -42,7 +42,21 @@ const char help[] = "--------------------------\r\n"
 void
 Jitter(int32_t MaxJitter, uint32_t const JitterSize, uint32_t JitterHistogram[]) {
     // write this for Lab 3 (the latest)
-
+    UART_OutString("\r\nMaxJitter: ");
+    UART_OutUDec((uint32_t) MaxJitter);
+    UART_OutString("\n\r");
+    for(int i = 0; i < JitterSize; i++) {
+        if(JitterHistogram[i] == 0) continue;
+        UART_OutUDec((uint32_t) i);
+        if(i == JitterSize-1) {
+            UART_OutString("+: ");
+        } else {
+            UART_OutString(": ");
+        }
+        UART_OutUDec((uint32_t) JitterHistogram[i]);
+        UART_OutString("\r\n");
+    }
+    UART_OutString("\r\n");
 }
 
 /*

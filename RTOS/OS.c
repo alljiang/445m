@@ -25,7 +25,7 @@
 #include "launchpad.h"
 #include "timers.h"
 
-//#define ROUND_ROBIN_SCHEDULING
+#define ROUND_ROBIN_SCHEDULING
 
 #ifndef ROUND_ROBIN_SCHEDULING
 #define PRIORITY_SCHEDULING
@@ -60,6 +60,13 @@ int32_t MaxJitter;             // largest time jitter between interrupts in usec
 #define JITTERSIZE 64
 uint32_t const JitterSize = JITTERSIZE;
 uint32_t JitterHistogram[JITTERSIZE] = { 0, };
+uint32_t period1 = TIME_1MS;
+
+int32_t MaxJitter2;             // largest time jitter between interrupts in usec
+#define JITTERSIZE2 64
+uint32_t const JitterSize2 = JITTERSIZE2;
+uint32_t JitterHistogram2[JITTERSIZE2] = { 0, };
+uint32_t period2 = TIME_1MS;
 
 uint64_t osTimeMs;
 int id_counter = 0;
@@ -446,6 +453,10 @@ OS_Id(void) {
 // must be called within interrupt
 void
 OS_CallBackgroundTask(uint8_t taskID) {
+    long jitter;
+    unsigned static long LastTime, LastTime2;
+    uint32_t thisTime, diff;
+
     if (taskID == 0) {
         // Switch 1 Task
         (*SW1Task)();
@@ -455,9 +466,45 @@ OS_CallBackgroundTask(uint8_t taskID) {
     } else if (taskID == 2) {
         // Periodic Thread 1
         (*BackgroundPeriodicTask1)();
+
+        thisTime = OS_Time();
+        diff = OS_TimeDifference(LastTime, thisTime);
+        if (diff > period1) {
+            jitter = (diff - period1 + 4) / 8;  // in 0.1 usec
+        } else {
+            jitter = (period1 - diff + 4) / 8;  // in 0.1 usec
+        }
+
+        if (jitter > MaxJitter) {
+            MaxJitter = jitter; // in usec
+        }       // jitter should be 0
+
+        if (jitter >= JitterSize) {
+            jitter = JitterSize - 1;
+        }
+        JitterHistogram[jitter]++;
+        LastTime = thisTime;
     } else if (taskID == 3) {
         // Periodic Thread 2
         (*BackgroundPeriodicTask2)();
+
+        thisTime = OS_Time();
+        diff = OS_TimeDifference(LastTime2, thisTime);
+        if (diff > period2) {
+            jitter = (diff - period2 + 4) / 8;  // in 0.1 usec
+        } else {
+            jitter = (period2 - diff + 4) / 8;  // in 0.1 usec
+        }
+
+        if (jitter > MaxJitter2) {
+            MaxJitter2 = jitter; // in usec
+        }       // jitter should be 0
+
+        if (jitter >= JitterSize2) {
+            jitter = JitterSize2 - 1;
+        }
+        JitterHistogram2[jitter]++;
+        LastTime2 = thisTime;
     }
 }
 
@@ -488,9 +535,11 @@ OS_AddPeriodicThread(void
 
     if (BackgroundPeriodicTask1 == NULL) {
         BackgroundPeriodicTask1 = task;
+        period1 = period;
         Timer1Init(period, priority);
     } else {
         BackgroundPeriodicTask2 = task;
+        period2 = period;
         Timer2Init(period, priority);
     }
 
@@ -731,8 +780,8 @@ static uint32_t Mailbox_Data;
 void
 OS_MailBox_Init(void) {
     // put Lab 2 (and beyond) solution here
-    OS_InitSemaphore(&Mailbox_DataValid, -1);
-    OS_InitSemaphore(&Mailbox_BoxFree, 0);
+    OS_InitSemaphore(&Mailbox_DataValid, 0);
+    OS_InitSemaphore(&Mailbox_BoxFree, 1);
 }
 ;
 

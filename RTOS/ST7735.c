@@ -830,7 +830,7 @@ void ST7735_InitB(void) {
   ST7735_SetCursor(0,0);
   StTextColor = ST7735_YELLOW;
   ST7735_FillScreen(0);                 // set screen to black
-  OS_InitSemaphore(&LCDFree,0);         // means LCD free
+  OS_InitSemaphore(&LCDFree,1);         // means LCD free
 }
 
 
@@ -859,7 +859,7 @@ void ST7735_InitR(enum initRFlags option) {
   ST7735_SetCursor(0,0);
   StTextColor = ST7735_YELLOW;
   ST7735_FillScreen(0);                 // set screen to black
-  OS_InitSemaphore(&LCDFree, 0);          // means LCD free
+  OS_InitSemaphore(&LCDFree, 1);          // means LCD free
 }
 
 
