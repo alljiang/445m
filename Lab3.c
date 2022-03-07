@@ -851,9 +851,9 @@ Testmain7(void) {      // Testmain7  Lab 3
     NumCreated = 0;
     NumCreated += OS_AddThread(&OutputThread, 128, 2);  // results output thread
     NumCreated += OS_AddThread(&Signal3, 128, 2);   // signalling thread
-    NumCreated += OS_AddThread(&Wait1, 128, 2);   // waiting thread
-    NumCreated += OS_AddThread(&Wait2, 128, 2);   // waiting thread
-    NumCreated += OS_AddThread(&Wait3, 128, 2);   // waiting thread
+    NumCreated += OS_AddThread(&Wait1, 128, 1);   // waiting thread
+    NumCreated += OS_AddThread(&Wait2, 128, 1);   // waiting thread
+    NumCreated += OS_AddThread(&Wait3, 128, 1);   // waiting thread
     NumCreated += OS_AddThread(&Thread6, 128, 5); // idle thread to keep from crashing
 
     OS_Launch(TIME_1MS);  // 1ms, doesn't return, interrupts enabled in here

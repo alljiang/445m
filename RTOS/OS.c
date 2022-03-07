@@ -25,7 +25,7 @@
 #include "launchpad.h"
 #include "timers.h"
 
-#define ROUND_ROBIN_SCHEDULING
+//#define ROUND_ROBIN_SCHEDULING
 
 #ifndef ROUND_ROBIN_SCHEDULING
 #define PRIORITY_SCHEDULING
@@ -84,6 +84,8 @@ int32_t os_fifo[OS_FIFO_SIZE];
 uintptr_t os_fifo_ptr_head;
 uintptr_t os_fifo_ptr_tail;
 
+bool OS_Started = false;
+
 /*------------------------------------------------------------------------------
  Systick Interrupt Handler
  SysTick interrupt happens every 10 ms
@@ -129,6 +131,8 @@ OS_Init(void) {
 
     // Start high res system timer
     Timer4Init(0xFFFFFFFF, 7);
+
+    OS_Started = true;
 }
 
 // Inserts second in between first and third
@@ -171,7 +175,7 @@ getPriorityTail(TCBPtr tcb, int priority) {
     while (tcb->TCB_next != head) {
         if (tcb->priority <= priority) {
             tcb = tcb->TCB_next;
-        }
+        } else break;
     }
     return tcb;
 }
@@ -397,7 +401,7 @@ OS_AddThread(void
 
         // If RunPt is the tail, then change RunPt to point to the added TCB
         // since RunPt should point to to highest priority TCB
-        if (tail == RunPt) {
+        if (tail == RunPt && !OS_Started) {
             RunPt = tail->TCB_previous;
         }
 #endif
@@ -969,8 +973,9 @@ OS_Scheduler() {
             // bounded waiting - for all unblocked TCBs of the same priority,
             // choose the one that hasn't been serviced for longest
             search = runCandidateRoundRobin->TCB_next;
-            earliestServiceTime = search->last_serviced;
+            earliestServiceTime = runCandidateRoundRobin->last_serviced;
             start = runCandidateRoundRobin;
+
             while (search != start) {
                 if (search->priority != start->priority
                         || search->blocked_state != 0
