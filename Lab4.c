@@ -387,8 +387,12 @@ Testmain0(void) {  // Testmain0
 // Warning: this overwrites whatever is on the disk
 void
 diskError(char *errtype, uint32_t n) {
-    printf(errtype);
-    printf(" disk error %u", n);
+//    printf(errtype);
+//    printf(" disk error %u", n);
+    UART_OutString(errtype);
+    UART_OutString(" disk error ");
+    UART_OutUDec(n);
+
     OS_Kill();
 }
 unsigned char buffer[512];  // don't put on stack
@@ -401,10 +405,12 @@ TestDisk(void) {
     uint32_t n;
     // simple test of eDisk
     ST7735_DrawString(0, 1, "eDisk test      ", ST7735_WHITE);
-    printf("\n\rEE445M/EE380L, Lab 4 eDisk test\n\r");
+//    printf("\n\rEE445M/EE380L, Lab 4 eDisk test\n\r");
+    UART_OutString("\n\rEE445M/EE380L, Lab 4 eDisk test\n\r");
     result = eDisk_Init(0);  // initialize disk
     if (result) diskError("eDisk_Init", result);
-    printf("Writing blocks\n\r");
+//    printf("Writing blocks\n\r");
+    UART_OutString("Writing blocks\n\r");
     n = 1;    // seed
     for (block = 0; block < MAXBLOCKS; block++) {
         for (i = 0; i < 512; i++) {
@@ -416,7 +422,8 @@ TestDisk(void) {
             diskError("eDisk_WriteBlock", block); // save to disk
         PD3 = 0x00;
     }
-    printf("Reading blocks\n\r");
+//    printf("Reading blocks\n\r");
+    UART_OutString("Reading blocks\n\r");
     n = 1;  // reseed, start over to get the same sequence
     for (block = 0; block < MAXBLOCKS; block++) {
         PD2 = 0x04;     // PF2 high for one block read
@@ -425,14 +432,18 @@ TestDisk(void) {
         for (i = 0; i < 512; i++) {
             n = (16807 * n) % 2147483647; // pseudo random sequence
             if (buffer[i] != (0xFF & n)) {
-                printf(
-                        "Read data not correct, block=%u, i=%u, expected %u, read %u\n\r",
-                        block, i, (0xFF & n), buffer[i]);
+//                printf(
+//                        "Read data not correct, block=%u, i=%u, expected %u, read %u\n\r",
+//                        block, i, (0xFF & n), buffer[i]);
+                UART_OutString("Read data not correct\n\r");
                 OS_Kill();
             }
         }
     }
-    printf("Successful test of %u blocks\n\r", MAXBLOCKS);
+//    printf("Successful test of %u blocks\n\r", MAXBLOCKS);
+    UART_OutString("Successful test of blocks: ");
+    UART_OutUDec(MAXBLOCKS);
+    UART_OutString("\r\n");
     ST7735_DrawString(0, 1, "eDisk successful", ST7735_YELLOW);
     Running = 0; // launch again
     OS_Kill();
@@ -480,27 +491,41 @@ TestDirectory(void) {
     unsigned long total;
     num = 0;
     total = 0;
-    printf("\n\r");
+//    printf("\n\r");
+    UART_OutString("\n\r");
     if (eFile_DOpen("")) diskError("eFile_DOpen", 0);
     while (!eFile_DirNext(&name, &size)) {
-        printf(string1, name);
-        printf("  ");
-        printf(string2, size);
-        printf("\n\r");
+//        printf(string1, name);
+//        printf("  ");
+//        printf(string2, size);
+//        printf("\n\r");
+        UART_OutString((char*) string1);
+        UART_OutString(name);
+        UART_OutString("  ");
+        UART_OutString((char*) string2);
+        UART_OutUDec(size);
+        UART_OutString("\n\r");
         total = total + size;
         num++;
     }
-    printf(string3, num);
-    printf("\n\r");
-    printf(string4, total);
-    printf("\n\r");
+//    printf(string3, num);
+//    printf("\n\r");
+//    printf(string4, total);
+//    printf("\n\r");
+    UART_OutString((char*) string3);
+    UART_OutUDec(num);
+    UART_OutString("\n\r");
+    UART_OutString((char*) string4);
+    UART_OutUDec(total);
+    UART_OutString("\n\r");
     if (eFile_DClose()) diskError("eFile_DClose", 0);
 }
 void
 TestFile(void) {
     int i;
     char data;
-    printf("\n\rEE445M/EE380L, Lab 4 eFile test\n\r");
+//    printf("\n\rEE445M/EE380L, Lab 4 eFile test\n\r");
+    UART_OutString("\n\rEE445M/EE380L, Lab 4 eFile test\n\r");
     ST7735_DrawString(0, 1, "eFile test      ", ST7735_WHITE);
     // simple test of eFile
     if (eFile_Init()) diskError("eFile_Init", 0);
@@ -526,7 +551,8 @@ TestFile(void) {
     if (eFile_Delete("file1")) diskError("eFile_Delete", 0);
     TestDirectory();
     if (eFile_Unmount()) diskError("eFile_Unmount", 0);
-    printf("Successful test\n\r");
+//    printf("Successful test\n\r");
+    UART_OutString("Successful test\n\r");
     ST7735_DrawString(0, 1, "eFile successful", ST7735_YELLOW);
     Running = 0; // launch again
     OS_Kill();
@@ -560,12 +586,116 @@ Testmain2(void) {   // Testmain2
     return 0;               // this never executes
 }
 
+void
+TestDiskWrite(void) {
+    DSTATUS result;
+    uint32_t block = 0;
+    int i;
+
+    UART_OutString("\n\rMax Write Bandwidth Test\n\r");
+    result = eDisk_Init(0);  // initialize disk
+    if (result) {
+        diskError("eDisk_Init", result);
+    }
+
+    // write zeros to buffer
+    memset(buffer, 0, sizeof(buffer));
+
+    int startTime = OS_MsTime();
+    int byteWriteCount = 0;
+
+    while (startTime + 2000 > OS_MsTime()) {
+        if (eDisk_WriteBlock(buffer, block)) {
+            diskError("eDisk_WriteBlock", block);
+        } else {
+            block++;
+            byteWriteCount += 512;
+        }
+    }
+
+    UART_OutString("Successful test. Max Write Bandwidth: ");
+    UART_OutUDec(byteWriteCount / 1024);
+    UART_OutString(" kB/s\r\n");
+    OS_Kill();
+}
+
+void
+TestDiskRead(void) {
+    DSTATUS result;
+    uint32_t block = 0;
+
+    UART_OutString("\n\rMax Read Bandwidth Test\n\r");
+    result = eDisk_Init(0);  // initialize disk
+    if (result) {
+        diskError("eDisk_Init", result);
+    }
+
+    int startTime = OS_MsTime();
+    int byteWriteCount = 0;
+
+    while (startTime + 2000 > OS_MsTime()) {
+        if (eDisk_ReadBlock(buffer, block)) {
+            diskError("eDisk_ReadBlock", block); // read from disk
+        } else {
+            block++;
+            byteWriteCount += 512;
+        }
+    }
+
+    UART_OutString("Successful test. Max Read Bandwidth: ");
+    UART_OutUDec(byteWriteCount / 1024);
+    UART_OutString(" kB/s\r\n");
+    OS_Kill();
+}
+
+int
+Testmain_write_bandwidth(void) {
+    OS_Init();
+    PortD_Init();
+    Running = 1;
+
+// attach background tasks
+    OS_AddPeriodicThread(&disk_timerproc, TIME_1MS, 0); // time out routines for disk
+
+// create initial foreground threads
+    NumCreated = 0;
+    NumCreated += OS_AddThread(&TestDiskWrite, 128, 1);
+    NumCreated += OS_AddThread(&Idle, 128, 3);
+
+    OS_Launch(10 * TIME_1MS); // doesn't return, interrupts enabled in here
+    return 0;               // this never executes
+}
+
+int
+Testmain_read_bandwidth(void) {
+    OS_Init();
+    PortD_Init();
+    Running = 1;
+
+// attach background tasks
+    OS_AddPeriodicThread(&disk_timerproc, TIME_1MS, 0); // time out routines for disk
+
+// create initial foreground threads
+    NumCreated = 0;
+    NumCreated += OS_AddThread(&TestDiskRead, 128, 1);
+    NumCreated += OS_AddThread(&Idle, 128, 3);
+
+    OS_Launch(10 * TIME_1MS); // doesn't return, interrupts enabled in here
+    return 0;               // this never executes
+}
+
 //*******************Trampoline for selecting main to execute**********
 int
 main(void) { 			// main
     PLL_Init(Bus80MHz);
     GPIO_Initialize();
     Launchpad_PortFInitialize();
+    ST7735_InitR(INITR_GREENTAB);             // LCD initialization
+    UART_Init();                              // serial I/O for interpreter
 
-    realmain();
+//    Testmain_write_bandwidth();
+//    Testmain_read_bandwidth();
+//    Testmain1();
+    Testmain2();
+//    realmain();
 }

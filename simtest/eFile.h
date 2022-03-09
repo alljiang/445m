@@ -13,6 +13,8 @@
 #define DISK_SIZE_KB 2048
 #define DISK_BLOCK_COUNT ((DISK_SIZE_KB) * 2)
 
+#define FILENAME_MAX_LENGTH 7
+
 /**
  * @details This function must be called first, before calling any of the other eFile functions
  * @param  none

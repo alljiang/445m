@@ -131,8 +131,6 @@ OS_Init(void) {
 
     // Start high res system timer
     Timer4Init(0xFFFFFFFF, 7);
-
-    OS_Started = true;
 }
 
 // Inserts second in between first and third
@@ -460,6 +458,8 @@ OS_CallBackgroundTask(uint8_t taskID) {
     long jitter;
     unsigned static long LastTime, LastTime2;
     uint32_t thisTime, diff;
+
+    if(!OS_Started) return;
 
     if (taskID == 0) {
         // Switch 1 Task
@@ -904,6 +904,7 @@ OS_Launch(uint32_t theTimeSlice) {
     }
 
     SysTick_Init(theTimeSlice);
+    OS_Started = true;
     StartOS();
 
 exit:
