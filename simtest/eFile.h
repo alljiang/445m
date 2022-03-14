@@ -115,30 +115,8 @@ eFile_RClose(void); // close the file for writing
 int
 eFile_Delete(const char name[]);  // remove this file
 
-/**
- * @details Open a (sub)directory, read into RAM
- * @param directory name is an ASCII string up to seven characters
- * if subdirectories are supported (optional, empty sring for root directory)
- * @return 0 if successful and 1 on failure (e.g., trouble reading from flash)
- */
 int
-eFile_DOpen(const char name[]);
-
-/**
- * @details Retreive directory entry from open directory
- * @param pointers to return file name and size by reference
- * @return 0 if successful and 1 on failure (e.g., end of directory)
- */
-int
-eFile_DirNext(char *name[], unsigned long *size);
-
-/**
- * @details Close the directory
- * @param none
- * @return 0 if successful and 1 on failure (e.g., wasn't open)
- */
-int
-eFile_DClose(void);
+eFile_PrintDirectory(void (*print)(char *));
 
 /**
  * @details Unmount and deactivate the file system.
