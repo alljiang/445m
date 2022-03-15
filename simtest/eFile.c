@@ -45,6 +45,44 @@ exit:
     return rv;
 }
 
+// inserts block2 and populates as free block
+// Output: 0 if successful and 1 on failure
+int
+insertFreeBlock(int16_t block1, int16_t block2, int16_t block3) {
+    int rv = 0;
+
+    // insert block2 between block1 and block3
+    rv = eDisk_ReadBlock(buffer1, block1);
+    if (rv == 1) goto exit;
+
+    rv = eDisk_ReadBlock(buffer2, block3);
+    if (rv == 1) goto exit;
+
+    buffer1[0] = block2 & 0xFFu;
+    buffer1[1] = block2 >> 8u;
+    buffer2[2] = block2 & 0xFFu;
+    buffer2[3] = block2 >> 8u;
+
+    rv = eDisk_WriteBlock(buffer1, block1);
+    if (rv == 1) goto exit;
+
+    rv = eDisk_WriteBlock(buffer2, block3);
+    if (rv == 1) goto exit;
+
+    // populate block2 as free block
+    memset(buffer1, 0, 512);
+    buffer1[0] = block3 & 0xFFu;
+    buffer1[1] = block3 >> 8u;
+    buffer1[2] = block1 & 0xFFu;
+    buffer1[3] = block1 >> 8u;
+
+    rv = eDisk_WriteBlock(buffer1, block2);
+    if (rv == 1) goto exit;
+
+exit:
+    return rv;
+}
+
 //---------- eFile_Init-----------------
 // Activate the file system, without formating
 // Input: none
@@ -81,6 +119,7 @@ eFile_Format(void) { // erase disk, add format
 
     if (!filesystem_initialized) {
         rv = 1;
+        goto exit;
     }
 
     // write zeros to buffer
@@ -126,6 +165,11 @@ int
 eFile_Mount(void) { // initialize file system
     int rv = 0;
 
+    if (!filesystem_initialized) {
+        rv = 1;
+        goto exit;
+    }
+
     // get file index list
     rv = eDisk_ReadBlock(buffer1, 0);
     if (rv) goto exit;
@@ -148,6 +192,11 @@ eFile_Create(const char name[]) {  // create new file, make it empty
     int prevFreeBlock;
     int blockIndex;
     int i;
+
+    if (!filesystem_initialized) {
+        rv = 1;
+        goto exit;
+    }
 
     // verify length of name is in range [1, FILENAME_MAX_LENGTH]
     for (length = 0; length <= FILENAME_MAX_LENGTH; length++) {
@@ -245,6 +294,11 @@ eFile_WOpen(const char name[]) {      // open a file for writing
     int length;
     int dataBlockPtr = 0;
 
+    if (!filesystem_initialized) {
+        rv = 1;
+        goto exit;
+    }
+
     // check if file already open
     if (writing || reading) {
         rv = 1;
@@ -316,6 +370,11 @@ eFile_Write(const char data) {
     int bytesRemaining = (buffer3[3] << 8u) | buffer3[2];
     int dataBlock, prevFreeBlock, nextFreeBlock;
 
+    if (!filesystem_initialized) {
+        rv = 1;
+        goto exit;
+    }
+
     if (bytesRemaining == 0) {
         // we are at the end of the file, need to allocate a new block
         
@@ -359,6 +418,10 @@ eFile_Write(const char data) {
 
         // add data to the new data block
         buffer2[4] = data;
+        
+        // update pointer to next data block
+        buffer2[0] = 0;
+        buffer2[1] = 0;
 
         // update bytes remaining to 508
         buffer2[2] = 508u & 0xFFu;
@@ -393,6 +456,11 @@ int
 eFile_WClose(void) { // close the file for writing
     int rv = 0;
 
+    if (!filesystem_initialized) {
+        rv = 1;
+        goto exit;
+    }
+
     if (!writing) {
         rv = 1;
         goto exit;
@@ -416,6 +484,12 @@ eFile_ROpen(const char name[]) {      // open a file for reading
     int rv = 0;
     int length = 0;
     int dataBlockPtr;
+    int i;
+
+    if (!filesystem_initialized) {
+        rv = 1;
+        goto exit;
+    }
 
     // check if file already open
     if (reading || writing) {
@@ -439,7 +513,7 @@ eFile_ROpen(const char name[]) {      // open a file for reading
     if (rv == 1) goto exit;
 
     // find file in file index list
-    for(int i = 2; i < sizeof(buffer1); i += 2) {
+    for(i = 2; i < sizeof(buffer1); i += 2) {
         int blockIndex = (buffer1[i + 1] << 8u) | buffer1[i];
         if (blockIndex == 0) {
             continue;
@@ -458,6 +532,12 @@ eFile_ROpen(const char name[]) {      // open a file for reading
         }
     }
 
+    if (i == 512) {
+        // file not found
+        rv = 1;
+        goto exit;
+    }
+
     loadedDataBlock = dataBlockPtr;
     reading = true;
     readIndex = 0;
@@ -474,6 +554,11 @@ exit:
 int
 eFile_ReadNext(char *pt) {       // get next byte
     int rv = 0;
+
+    if (!filesystem_initialized) {
+        rv = 1;
+        goto exit;
+    }
     
     if (!reading) {
         rv = 1;
@@ -520,6 +605,11 @@ int
 eFile_RClose(void) { // close the file for writing
     int rv = 0;
 
+    if (!filesystem_initialized) {
+        rv = 1;
+        goto exit;
+    }
+
     if (!reading) {
         rv = 1;
         goto exit;
@@ -538,16 +628,113 @@ exit:
 int
 eFile_Delete(const char name[]) {  // remove this file
     int rv = 0;
+    int length = 0;
+    int dataBlockPtr, metadataBlockIndex;
+    int i;
+
+    if (!filesystem_initialized) {
+        rv = 1;
+        goto exit;
+    }
+
+    // check if file already open
+    if (reading || writing) {
+        return 1;
+    }
+
+    // verify length of name is in range [1, FILENAME_MAX_LENGTH]
+    for (length = 0; length <= FILENAME_MAX_LENGTH; length++) {
+        if (name[length] == 0) {
+            break;
+        }
+    }
+    if (length == 0 || length > FILENAME_MAX_LENGTH) {
+        rv = 1;
+        goto exit;
+    }
+
+    reading = true;
+
+    rv = eFile_Mount();
+    if (rv == 1) goto exit;
+
+    // find file in file index list
+    for(i = 2; i < sizeof(buffer1); i += 2) {
+        metadataBlockIndex = (buffer1[i + 1] << 8u) | buffer1[i];
+        if (metadataBlockIndex == 0) {
+            continue;
+        }
+
+        rv = eDisk_ReadBlock(buffer2, metadataBlockIndex);
+        if (rv == 1) goto exit;
+        
+        if (strncmp(name, buffer2 + 2, length) == 0) {
+            // found file
+            dataBlockPtr = (buffer2[1] << 8u) | buffer2[0];
+
+            break;
+        }
+    }
+
+    if (i == 512) {
+        // file not found
+        rv = 1;
+        goto exit;
+    }
+    
+    // delete file
+
+    int firstFreeBlock = (buffer1[1] << 8u) | buffer1[0];
+
+    // remove file from file index list
+    buffer1[i] = 0;
+    buffer1[i + 1] = 0;
+    
+    // write file index list to flash
+    rv = eDisk_WriteBlock(buffer1, 0);
+    if (rv == 1) goto exit;
+
+    // get last free block
+    rv = eDisk_ReadBlock(buffer1, firstFreeBlock);
+    if (rv == 1) goto exit;
+    int lastFreeBlock = (buffer1[3] << 8u) | buffer1[2];
+
+    // delete metadata block
+    rv = insertFreeBlock(lastFreeBlock, metadataBlockIndex, firstFreeBlock);
+    if (rv == 1) goto exit;
+    lastFreeBlock = metadataBlockIndex;
+
+    // delete all data blocks
+    while (true) {
+        rv = eDisk_ReadBlock(buffer1, dataBlockPtr);
+        if (rv == 1) goto exit;
+        int nextDataBlock = (buffer1[1] << 8u) | buffer1[0];
+
+        rv = insertFreeBlock(lastFreeBlock, dataBlockPtr, firstFreeBlock);
+        if (rv == 1) goto exit;
+        lastFreeBlock = dataBlockPtr;
+
+        if (nextDataBlock == 0) {
+            break;
+        }
+
+        dataBlockPtr = nextDataBlock;
+    }
 
 exit:
-    return rv;   // replace
+    return rv;
 }
 
 int
 eFile_PrintDirectory(void (*print)(char *)) {
     int rv = 0;
 
-    rv = eDisk_ReadBlock(buffer1, 0);
+    if (!filesystem_initialized) {
+        rv = 1;
+        goto exit;
+    }
+
+    rv = eFile_Mount();
     if(rv == 1) goto exit;
 
     for(int i = 2; i < sizeof(buffer1); i += 2) {
@@ -564,14 +751,4 @@ eFile_PrintDirectory(void (*print)(char *)) {
 
 exit:
     return rv;
-}
-
-//---------- eFile_Unmount-----------------
-// Unmount and deactivate the file system
-// Input: none
-// Output: 0 if successful and 1 on failure (not currently mounted)
-int
-eFile_Unmount(void) {
-
-    return 1;   // replace
 }

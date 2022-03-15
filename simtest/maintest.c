@@ -65,5 +65,11 @@ int main() {
 
     eFile_PrintDirectory(&UART_OutString);
 
+    printf("Deleting aa.txt\n");
+
+    rv = eFile_Delete("aa.txt");
+
+    eFile_PrintDirectory(&UART_OutString);
+
     return 0;
 }

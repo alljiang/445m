@@ -117,12 +117,3 @@ eFile_Delete(const char name[]);  // remove this file
 
 int
 eFile_PrintDirectory(void (*print)(char *));
-
-/**
- * @details Unmount and deactivate the file system.
- * @param  none
- * @return 0 if successful and 1 on failure (e.g., trouble writing to flash)
- * @brief  Unmount the disk
- */
-int
-eFile_Unmount(void);
