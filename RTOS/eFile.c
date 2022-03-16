@@ -234,6 +234,24 @@ eFile_Create(const char name[]) {  // create new file, make it empty
         goto exit;
     }
 
+    // search file index list to make sure file does not already exist
+    // find file in file index list
+    for (i = 2; i < sizeof(buffer1); i += 2) {
+        int blockIndex = (buffer1[i + 1] << 8u) | buffer1[i];
+        if (blockIndex == 0) {
+            continue;
+        }
+
+        rv = eDisk_ReadBlock(buffer2, blockIndex);
+        if (rv == 1) goto exit;
+
+        if (strncmp(name, (const char*) (buffer2 + 2), length) == 0) {
+            // file already exists
+            rv = 1;
+            goto exit;
+        }
+    }
+
     // add metadataBlock to file index list
     for (i = 2; i < sizeof(buffer1); i += 2) {
         blockIndex = (buffer1[i + 1] << 8u) | buffer1[i];
@@ -279,18 +297,18 @@ eFile_Create(const char name[]) {  // create new file, make it empty
 
     // update file index list
     rv = eDisk_WriteBlock(buffer1, 0);
-    if(rv == 1) goto exit;
+    if (rv == 1) goto exit;
 
     // write metadata block
     rv = eDisk_WriteBlock(buffer2, metadataBlock);
-    if(rv == 1) goto exit;
+    if (rv == 1) goto exit;
 
     // write data block
     rv = eDisk_WriteBlock(buffer3, dataBlock);
-    if(rv == 1) goto exit;
+    if (rv == 1) goto exit;
 
     rv = linkFreeBlocks(prevFreeBlock, nextFreeBlock);
-    if(rv == 1) goto exit;
+    if (rv == 1) goto exit;
 
 exit:
     OS_Signal(&SPIFree);
@@ -338,7 +356,7 @@ eFile_WOpen(const char name[]) {      // open a file for writing
     if (rv == 1) goto exit;
 
     // find file in file index list
-    for(int i = 2; i < sizeof(buffer1); i += 2) {
+    for (int i = 2; i < sizeof(buffer1); i += 2) {
         blockIndex = (buffer1[i + 1] << 8u) | buffer1[i];
         if (blockIndex == 0) {
             continue;
@@ -347,7 +365,7 @@ eFile_WOpen(const char name[]) {      // open a file for writing
         rv = eDisk_ReadBlock(buffer2, blockIndex);
         if (rv == 1) goto exit;
 
-        if (strncmp(name, (char*)(buffer2 + 2), length) == 0) {
+        if (strncmp(name, (char*) (buffer2 + 2), length) == 0) {
             // found file, read last block into RAM
             dataBlockPtr = (buffer2[1] << 8u) | buffer2[0];
             break;
@@ -420,7 +438,8 @@ eFile_Write(const char data) {
 
         if (dataBlock == 0) {
             // no more free blocks, cannot write
-            return 1;
+            rv = 1;
+            goto exit;
         }
 
         // load in the free block
@@ -440,11 +459,11 @@ eFile_Write(const char data) {
 
         // update the loaded data block
         rv = eDisk_WriteBlock(buffer3, loadedDataBlock);
-        if(rv == 1) goto exit;
+        if (rv == 1) goto exit;
 
         // update the file index list
         rv = eDisk_WriteBlock(buffer1, 0);
-        if(rv == 1) goto exit;
+        if (rv == 1) goto exit;
 
         loadedDataBlock = dataBlock;
 
@@ -464,7 +483,7 @@ eFile_Write(const char data) {
 
         // link up prev and next free blocks
         rv = linkFreeBlocks(prevFreeBlock, nextFreeBlock);
-        if(rv == 1) goto exit;
+        if (rv == 1) goto exit;
     }
 
     // write data to buffer
@@ -502,7 +521,7 @@ eFile_WClose(void) { // close the file for writing
     }
 
     rv = eDisk_WriteBlock(buffer3, loadedDataBlock);
-    if(rv == 1) goto exit;
+    if (rv == 1) goto exit;
 
     writing = false;
 
@@ -531,7 +550,8 @@ eFile_ROpen(const char name[]) {      // open a file for reading
 
     // check if file already open
     if (reading || writing) {
-        return 1;
+        rv = 1;
+        goto exit;
     }
 
     // verify length of name is in range [1, FILENAME_MAX_LENGTH]
@@ -549,7 +569,7 @@ eFile_ROpen(const char name[]) {      // open a file for reading
     if (rv == 1) goto exit;
 
     // find file in file index list
-    for(i = 2; i < sizeof(buffer1); i += 2) {
+    for (i = 2; i < sizeof(buffer1); i += 2) {
         int blockIndex = (buffer1[i + 1] << 8u) | buffer1[i];
         if (blockIndex == 0) {
             continue;
@@ -558,7 +578,7 @@ eFile_ROpen(const char name[]) {      // open a file for reading
         rv = eDisk_ReadBlock(buffer2, blockIndex);
         if (rv == 1) goto exit;
 
-        if (strncmp(name, (const char*)(buffer2 + 2), length) == 0) {
+        if (strncmp(name, (const char*) (buffer2 + 2), length) == 0) {
             // found file, read first block into buffer3
             dataBlockPtr = (buffer2[1] << 8u) | buffer2[0];
 
@@ -689,7 +709,8 @@ eFile_Delete(const char name[]) {  // remove this file
 
     // check if file already open
     if (reading || writing) {
-        return 1;
+        rv = 1;
+        goto exit;
     }
 
     // verify length of name is in range [1, FILENAME_MAX_LENGTH]
@@ -707,7 +728,7 @@ eFile_Delete(const char name[]) {  // remove this file
     if (rv == 1) goto exit;
 
     // find file in file index list
-    for(i = 2; i < sizeof(buffer1); i += 2) {
+    for (i = 2; i < sizeof(buffer1); i += 2) {
         metadataBlockIndex = (buffer1[i + 1] << 8u) | buffer1[i];
         if (metadataBlockIndex == 0) {
             continue;
@@ -716,7 +737,7 @@ eFile_Delete(const char name[]) {  // remove this file
         rv = eDisk_ReadBlock(buffer2, metadataBlockIndex);
         if (rv == 1) goto exit;
 
-        if (strncmp(name, (char*)(buffer2 + 2), length) == 0) {
+        if (strncmp(name, (char*) (buffer2 + 2), length) == 0) {
             // found file
             dataBlockPtr = (buffer2[1] << 8u) | buffer2[0];
 
@@ -770,12 +791,13 @@ eFile_Delete(const char name[]) {  // remove this file
     }
 
 exit:
-OS_Signal(&SPIFree);
+    OS_Signal(&SPIFree);
     return rv;
 }
 
 int
-eFile_PrintDirectory(void (*print)(char *)) {
+eFile_PrintDirectory(void
+(*print)(char*)) {
     int rv = 0;
 
     OS_Wait(&SPIFree);
@@ -788,7 +810,7 @@ eFile_PrintDirectory(void (*print)(char *)) {
     rv = eDisk_ReadBlock(buffer1, 0);
     if (rv == 1) goto exit;
 
-    for(int i = 2; i < sizeof(buffer1); i += 2) {
+    for (int i = 2; i < sizeof(buffer1); i += 2) {
         int blockIndex = (buffer1[i + 1] << 8u) | buffer1[i];
         if (blockIndex == 0) {
             continue;

@@ -38,7 +38,7 @@ const char help[] = "--------------------------\r\n"
         " 9) write <data> - writes data to open file\r\n"
         "10) wclose - closes file from writing\r\n"
         "11) create <filename> - creates file\r\n"
-        "12) - \r\n"
+        "12) wspam - writes 600 characters to open file\r\n"
         "13) - \r\n"
         "14) - \r\n"
         "15) - \r\n"
@@ -132,6 +132,7 @@ const char str_wopen[] = "wopen";
 const char str_write[] = "write";
 const char str_wclose[] = "wclose";
 const char str_create[] = "create";
+const char str_wspam[] = "wspam";
 const char str_newline[] = "\r\n";
 
 const char msg_format_success[] =
@@ -160,6 +161,8 @@ const char msg_create_success[] =
         "Successfully created file\r\n";
 const char msg_create_fail[] =
         "Failed to create file\r\n";
+const char msg_spam_success[] =
+        "File spam success\r\n";
 
 extern uint32_t NumCreated;
 extern uint32_t MaxJitter;
@@ -285,6 +288,15 @@ Interpreter_Parse(char *buffer) {
         } else {
             UART_OutStringNonBlock((char*) msg_create_fail);
         }
+    } else if (EQ(str_wspam, token)) {
+        for (int i = 0; i < 600; i++) {
+            rv = eFile_Write('e');
+            if (rv != 0) {
+                UART_OutStringNonBlock((char*) msg_write_fail);
+                break;
+            }
+        }
+        if (rv == 0) UART_OutStringNonBlock((char*) msg_spam_success);
     } else if (EQ("", token)) {
 
     } else if (EQ("", token)) {
@@ -320,8 +332,7 @@ Interpreter(void) {
 
     while (1) {
         if (!printed_Prompt) {
-            UART_OutCharNonBlock('>');
-            UART_OutCharNonBlock(' ');
+            UART_OutStringNonBlock("\r\n> ");
             printed_Prompt = true;
         }
         do {
@@ -340,7 +351,6 @@ Interpreter(void) {
             // still adding to buffer
             buffer[buffer_index] = input;
             buffer_index++;
-            UART_OutStringNonBlock((char*) str_newline);
         } else {
             // add null terminator to buffer
             memset(buffer + buffer_index, 0, 40 - buffer_index);

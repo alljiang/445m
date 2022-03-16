@@ -650,6 +650,106 @@ TestDiskRead(void) {
     OS_Kill();
 }
 
+void
+TestDiskFunctionality(void) {
+    int rv = 0;
+    char c;
+
+    UART_OutString("\n\rFunctionality Test\n\r");
+
+    rv = eFile_Init();
+    if (rv == 1) goto exit;
+
+    rv = eFile_Mount();
+    if (rv == 1) goto exit;
+
+    rv = eFile_Format();
+    if (rv == 1) goto exit;
+
+    rv = eFile_Create("asdf");
+    if (rv == 1) goto exit;
+
+    rv = eFile_Create("urmom");
+    if (rv == 1) goto exit;
+
+    // attempt to create duplicate file
+    rv = eFile_Create("asdf");
+    rv = rv == 0 ? 1 : 0;
+    if (rv == 1) goto exit;
+
+    // attempt to write to a file before opening it
+    rv = eFile_Write('a');
+    rv = rv == 0 ? 1 : 0;
+    if (rv == 1) goto exit;
+
+    // attempt to write to a file that doesn't exist
+    rv = eFile_WOpen("asdfg");
+    rv = rv == 0 ? 1 : 0;
+    if (rv == 1) goto exit;
+
+    // attempt to close a file that is not open
+    rv = eFile_WClose();
+    rv = rv == 0 ? 1 : 0;
+    if (rv == 1) goto exit;
+
+    rv = eFile_WOpen("asdf");
+    if (rv == 1) goto exit;
+
+    // attempt to open a file while another is already open
+    rv = eFile_WOpen("urmom");
+    rv = rv == 0 ? 1 : 0;
+    if (rv == 1) goto exit;
+
+    for (int i = 0; i < 600; i++) {
+        rv = eFile_Write('a');
+        if (rv == 1) goto exit;
+    }
+
+    // attempt to read file while writing is open
+    rv = eFile_ROpen("asdf");
+    rv = rv == 0 ? 1 : 0;
+    if (rv == 1) goto exit;
+
+    rv = eFile_WClose();
+    if (rv == 1) goto exit;
+
+    // attempt to read file before reading open
+    rv = eFile_ReadNext(&c);
+    rv = rv == 0 ? 1 : 0;
+    if (rv == 1) goto exit;
+
+     rv = eFile_ROpen("asdf");
+     for (int i = 0; i < 601; i++) {
+         rv = eFile_ReadNext(&c);
+         if (rv == 1 && i != 600) goto exit;
+         if (i == 600 && rv != 1) goto exit;
+         if (rv == 0 && c != 'a') {
+             rv = 1;
+             goto exit;
+         }
+     }
+
+     rv = eFile_RClose();
+     if (rv == 1) goto exit;
+
+     // delete a file that doesn't exist
+     rv = eFile_Delete("asdfg");
+     rv = rv == 0 ? 1 : 0;
+     if (rv == 1) goto exit;
+
+     rv = eFile_Delete("asdf");
+     if (rv == 1) goto exit;
+
+exit:
+    if (rv == 1) {
+        UART_OutString("Functionality test failed\r\n");
+    } else {
+        UART_OutString("Functionality test passed\r\n");
+    }
+
+    OS_Kill();
+}
+
 int
 Testmain_write_bandwidth(void) {
     OS_Init();
@@ -686,6 +786,26 @@ Testmain_read_bandwidth(void) {
     return 0;               // this never executes
 }
 
+int
+Testmain_functionality(void) {
+    OS_Init();
+    PortD_Init();
+    Running = 1;
+
+// attach background tasks
+    OS_AddPeriodicThread(&disk_timerproc, TIME_1MS, 0); // time out routines for disk
+
+// create initial foreground threads
+    NumCreated = 0;
+    NumCreated += OS_AddThread(&TestDiskFunctionality, 128, 1);
+    NumCreated += OS_AddThread(&Idle, 128, 3);
+
+    OS_Launch(10 * TIME_1MS); // doesn't return, interrupts enabled in here
+    return 0;               // this never executes
+}
+
+
+
 //*******************Trampoline for selecting main to execute**********
 int
 main(void) { 			// main
@@ -697,6 +817,7 @@ main(void) { 			// main
 
 //    Testmain_write_bandwidth();
 //    Testmain_read_bandwidth();
+//    Testmain_functionality();
 //    Testmain1();
 //    Testmain2();
     realmain();
