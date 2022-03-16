@@ -533,7 +533,7 @@ static uint8_t Rotation;           // 0 to 3
 static enum initRFlags TabColor;
 static int16_t _width = ST7735_TFTWIDTH;   // this could probably be a constant, except it is used in Adafruit_GFX and depends on image rotation
 static int16_t _height = ST7735_TFTHEIGHT;
-Sema4Type LCDFree;       // used for mutual exclusion
+Sema4Type SPIFree;       // used for mutual exclusion
 
 
 // The Data/Command pin must be valid when the eighth bit is
@@ -830,7 +830,7 @@ void ST7735_InitB(void) {
   ST7735_SetCursor(0,0);
   StTextColor = ST7735_YELLOW;
   ST7735_FillScreen(0);                 // set screen to black
-  OS_InitSemaphore(&LCDFree,1);         // means LCD free
+  OS_InitSemaphore(&SPIFree,1);         // means LCD free
 }
 
 
@@ -859,7 +859,7 @@ void ST7735_InitR(enum initRFlags option) {
   ST7735_SetCursor(0,0);
   StTextColor = ST7735_YELLOW;
   ST7735_FillScreen(0);                 // set screen to black
-  OS_InitSemaphore(&LCDFree, 1);          // means LCD free
+  OS_InitSemaphore(&SPIFree, 1);          // means LCD free
 }
 
 
@@ -1417,7 +1417,7 @@ void ST7735_OutUDec2(uint32_t n, uint32_t l){
 
 char buffer[40];
 void ST7735_Message(uint32_t  d, uint32_t  l, char *pt, int32_t value){
-    OS_Wait(&LCDFree);
+    OS_Wait(&SPIFree);
     int i = 0;
 
     // write this as part of Labs 1 and 2
@@ -1436,7 +1436,7 @@ void ST7735_Message(uint32_t  d, uint32_t  l, char *pt, int32_t value){
 
     uint32_t charCount = ST7735_DrawString(0, line, buffer, 0xFFFF);
     ST7735_ClearLine(charCount, line, 0);
-    OS_Signal(&LCDFree);
+    OS_Signal(&SPIFree);
 }
 
 //-----------------------ST7735_OutUDec4-----------------------

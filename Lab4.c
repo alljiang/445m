@@ -485,6 +485,7 @@ char const string3[] = "Number of Files = %u";
 char const string4[] = "Number of Bytes = %lu";
 void
 TestDirectory(void) {
+    /*
     char *name;
     unsigned long size;
     unsigned int num;
@@ -519,6 +520,7 @@ TestDirectory(void) {
     UART_OutUDec(total);
     UART_OutString("\n\r");
     if (eFile_DClose()) diskError("eFile_DClose", 0);
+    */
 }
 void
 TestFile(void) {
@@ -531,7 +533,7 @@ TestFile(void) {
     if (eFile_Init()) diskError("eFile_Init", 0);
     if (eFile_Format()) diskError("eFile_Format", 0);
     if (eFile_Mount()) diskError("eFile_Mount", 0);
-    TestDirectory();
+//    TestDirectory();
     if (eFile_Create("file1")) diskError("eFile_Create", 0);
     if (eFile_WOpen("file1")) diskError("eFile_WOpen", 0);
     for (i = 0; i < 1000; i++) {
@@ -542,15 +544,16 @@ TestFile(void) {
         }
     }
     if (eFile_WClose()) diskError("eFile_WClose", 0);
-    TestDirectory();
+//    TestDirectory();
     if (eFile_ROpen("file1")) diskError("eFile_ROpen", 0);
     for (i = 0; i < 1000; i++) {
         if (eFile_ReadNext(&data)) diskError("eFile_ReadNext", i);
         UART_OutChar(data);
     }
+    eFile_RClose();
     if (eFile_Delete("file1")) diskError("eFile_Delete", 0);
-    TestDirectory();
-    if (eFile_Unmount()) diskError("eFile_Unmount", 0);
+//    TestDirectory();
+//    if (eFile_Unmount()) diskError("eFile_Unmount", 0);
 //    printf("Successful test\n\r");
     UART_OutString("Successful test\n\r");
     ST7735_DrawString(0, 1, "eFile successful", ST7735_YELLOW);
@@ -590,7 +593,6 @@ void
 TestDiskWrite(void) {
     DSTATUS result;
     uint32_t block = 0;
-    int i;
 
     UART_OutString("\n\rMax Write Bandwidth Test\n\r");
     result = eDisk_Init(0);  // initialize disk
@@ -696,6 +698,6 @@ main(void) { 			// main
 //    Testmain_write_bandwidth();
 //    Testmain_read_bandwidth();
 //    Testmain1();
-    Testmain2();
-//    realmain();
+//    Testmain2();
+    realmain();
 }

@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include "eFile.h"
+#include "sim-compat.h"
 
 void UART_OutString(char *str) {
     printf("%s\n", str);
@@ -18,26 +19,20 @@ int main() {
 
     rv = eFile_Format();
     if (rv == 1) printf("Bad\n");
-    
-    eFile_Mount();
 
-    rv = eFile_Create("aa.txt");
+    rv = eFile_Create("asdf");
     if (rv == 1) printf("Bad\n");
     
-    eFile_Mount();
-
-    rv = eFile_Create("bbb.txt");
+    rv = eFile_WOpen("asdf");
     if (rv == 1) printf("Bad\n");
     
-    eFile_Mount();
-
-    rv = eFile_WOpen("aa.txt");
+    rv = eFile_Write('a');
     if (rv == 1) printf("Bad\n");
 
-    for (int i = 0; i < 600; i++) {
-        rv = eFile_Write('a');
-        if (rv == 1) printf("Bad\n");
-    }
+    // for (int i = 0; i < 600; i++) {
+    //     rv = eFile_Write('a');
+    //     if (rv == 1) printf("Bad\n");
+    // }
     rv = eFile_WClose();
     if (rv == 1) printf("Bad\n");
 

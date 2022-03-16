@@ -6,8 +6,8 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdbool.h>
-#include "eDisk.h"
-#include "eFile.h"
+
+#include "sim-compat.h"
 
 bool filesystem_initialized = false;
 uint8_t buffer1[512];
@@ -17,6 +17,8 @@ int16_t buffer1Size;
 int16_t loadedDataBlock;
 int16_t readIndex;
 bool writing, reading;
+
+extern Sema4Type SPIFree;
 
 // links free blocks block1 and block2 in sequential order
 // Output: 0 if successful and 1 on failure
@@ -105,6 +107,8 @@ eFile_Init(void) { // initialize file system
     writing = false;
     reading = false;
 
+    OS_InitSemaphore(&SPIFree, 1);
+
 exit:
     return rv;
 }
@@ -116,6 +120,8 @@ exit:
 int
 eFile_Format(void) { // erase disk, add format
     int rv = 0;
+
+    OS_Wait(&SPIFree);
 
     if (!filesystem_initialized) {
         rv = 1;
@@ -154,6 +160,7 @@ eFile_Format(void) { // erase disk, add format
     }
 
 exit:
+    OS_Signal(&SPIFree);
     return rv;
 }
 
@@ -165,6 +172,8 @@ int
 eFile_Mount(void) { // initialize file system
     int rv = 0;
 
+    OS_Wait(&SPIFree);
+
     if (!filesystem_initialized) {
         rv = 1;
         goto exit;
@@ -175,6 +184,7 @@ eFile_Mount(void) { // initialize file system
     if (rv) goto exit;
 
 exit:
+    OS_Signal(&SPIFree);
     return rv;
 }
 
@@ -193,6 +203,8 @@ eFile_Create(const char name[]) {  // create new file, make it empty
     int blockIndex;
     int i;
 
+    OS_Wait(&SPIFree);
+
     if (!filesystem_initialized) {
         rv = 1;
         goto exit;
@@ -210,8 +222,8 @@ eFile_Create(const char name[]) {  // create new file, make it empty
     }
 
     // read file index list into buffer
-    rv = eFile_Mount();
-    if(rv == 1) goto exit;
+    rv = eDisk_ReadBlock(buffer1, 0);
+    if (rv == 1) goto exit;
 
     // get next free block to allocate a metadata block
     metadataBlock = (buffer1[1] << 8u) | buffer1[0];
@@ -279,8 +291,9 @@ eFile_Create(const char name[]) {  // create new file, make it empty
 
     rv = linkFreeBlocks(prevFreeBlock, nextFreeBlock);
     if(rv == 1) goto exit;
-    
+
 exit:
+    OS_Signal(&SPIFree);
     return rv;
 }
 
@@ -293,6 +306,10 @@ eFile_WOpen(const char name[]) {      // open a file for writing
     int rv = 0;
     int length;
     int dataBlockPtr = 0;
+    int numberOfBytesRemaining;
+    int blockIndex;
+
+    OS_Wait(&SPIFree);
 
     if (!filesystem_initialized) {
         rv = 1;
@@ -317,24 +334,30 @@ eFile_WOpen(const char name[]) {      // open a file for writing
     }
 
     // read file index list into buffer
-    rv = eFile_Mount();
-    if(rv == 1) goto exit;
+    rv = eDisk_ReadBlock(buffer1, 0);
+    if (rv == 1) goto exit;
 
     // find file in file index list
     for(int i = 2; i < sizeof(buffer1); i += 2) {
-        int blockIndex = (buffer1[i + 1] << 8u) | buffer1[i];
+        blockIndex = (buffer1[i + 1] << 8u) | buffer1[i];
         if (blockIndex == 0) {
             continue;
         }
 
         rv = eDisk_ReadBlock(buffer2, blockIndex);
         if (rv == 1) goto exit;
-        
-        if (strncmp(name, buffer2 + 2, length) == 0) {
+
+        if (strncmp(name, (char*)(buffer2 + 2), length) == 0) {
             // found file, read last block into RAM
             dataBlockPtr = (buffer2[1] << 8u) | buffer2[0];
             break;
         }
+    }
+
+    if (dataBlockPtr == 0) {
+        // could not find file
+        rv = 1;
+        goto exit;
     }
 
     rv = eDisk_ReadBlock(buffer3, dataBlockPtr);
@@ -342,10 +365,10 @@ eFile_WOpen(const char name[]) {      // open a file for writing
 
     // keep on getting the next data block in linked list until we reach
     // a point where we have bytes remaining (which means the last page)
-    int numberOfBytesRemaining = (buffer3[3] << 8u) | buffer3[2];
+    numberOfBytesRemaining = (buffer3[3] << 8u) | buffer3[2];
     while (numberOfBytesRemaining == 0) {
         dataBlockPtr = (buffer3[1] << 8u) | buffer3[0];
-        
+
         rv = eDisk_ReadBlock(buffer3, dataBlockPtr);
         if (rv == 1) goto exit;
 
@@ -357,6 +380,7 @@ eFile_WOpen(const char name[]) {      // open a file for writing
     writing = true;
 
 exit:
+    OS_Signal(&SPIFree);
     return rv;
 }
 
@@ -369,18 +393,26 @@ eFile_Write(const char data) {
     int rv = 0;
     int bytesRemaining = (buffer3[3] << 8u) | buffer3[2];
     int dataBlock, prevFreeBlock, nextFreeBlock;
+    int index;
+
+    OS_Wait(&SPIFree);
 
     if (!filesystem_initialized) {
         rv = 1;
         goto exit;
     }
 
+    if (!writing) {
+        rv = 1;
+        goto exit;
+    }
+
     if (bytesRemaining == 0) {
         // we are at the end of the file, need to allocate a new block
-        
+
         // read file index list into buffer
-        rv = eFile_Mount();
-        if(rv == 1) goto exit;
+        rv = eDisk_ReadBlock(buffer1, 0);
+        if (rv == 1) goto exit;
 
         // get next free block to allocate a data block
         rv = eDisk_ReadBlock(buffer1, 0);
@@ -413,12 +445,12 @@ eFile_Write(const char data) {
         // update the file index list
         rv = eDisk_WriteBlock(buffer1, 0);
         if(rv == 1) goto exit;
-        
+
         loadedDataBlock = dataBlock;
 
         // add data to the new data block
         buffer2[4] = data;
-        
+
         // update pointer to next data block
         buffer2[0] = 0;
         buffer2[1] = 0;
@@ -436,7 +468,7 @@ eFile_Write(const char data) {
     }
 
     // write data to buffer
-    int index = 508 - bytesRemaining + 4; 
+    index = 508 - bytesRemaining + 4;
     buffer3[index] = data;
 
     // update bytes remaining
@@ -445,6 +477,7 @@ eFile_Write(const char data) {
     buffer3[3] = bytesRemaining >> 8u;
 
 exit:
+    OS_Signal(&SPIFree);
     return rv;
 }
 
@@ -455,6 +488,8 @@ exit:
 int
 eFile_WClose(void) { // close the file for writing
     int rv = 0;
+
+    OS_Wait(&SPIFree);
 
     if (!filesystem_initialized) {
         rv = 1;
@@ -472,6 +507,7 @@ eFile_WClose(void) { // close the file for writing
     writing = false;
 
 exit:
+    OS_Signal(&SPIFree);
     return rv;
 }
 
@@ -485,6 +521,8 @@ eFile_ROpen(const char name[]) {      // open a file for reading
     int length = 0;
     int dataBlockPtr;
     int i;
+
+    OS_Wait(&SPIFree);
 
     if (!filesystem_initialized) {
         rv = 1;
@@ -507,9 +545,7 @@ eFile_ROpen(const char name[]) {      // open a file for reading
         goto exit;
     }
 
-    reading = true;
-
-    rv = eFile_Mount();
+    rv = eDisk_ReadBlock(buffer1, 0);
     if (rv == 1) goto exit;
 
     // find file in file index list
@@ -521,8 +557,8 @@ eFile_ROpen(const char name[]) {      // open a file for reading
 
         rv = eDisk_ReadBlock(buffer2, blockIndex);
         if (rv == 1) goto exit;
-        
-        if (strncmp(name, buffer2 + 2, length) == 0) {
+
+        if (strncmp(name, (const char*)(buffer2 + 2), length) == 0) {
             // found file, read first block into buffer3
             dataBlockPtr = (buffer2[1] << 8u) | buffer2[0];
 
@@ -543,6 +579,7 @@ eFile_ROpen(const char name[]) {      // open a file for reading
     readIndex = 0;
 
 exit:
+    OS_Signal(&SPIFree);
     return rv;
 }
 
@@ -554,12 +591,16 @@ exit:
 int
 eFile_ReadNext(char *pt) {       // get next byte
     int rv = 0;
+    int bytesRemaining;
+    int nextDataBlock;
+
+    OS_Wait(&SPIFree);
 
     if (!filesystem_initialized) {
         rv = 1;
         goto exit;
     }
-    
+
     if (!reading) {
         rv = 1;
         goto exit;
@@ -568,7 +609,7 @@ eFile_ReadNext(char *pt) {       // get next byte
     // check if at end of file
     if (readIndex == 508) {
         // read next data block
-        int nextDataBlock = (buffer3[1] << 8u) | buffer3[0];
+        nextDataBlock = (buffer3[1] << 8u) | buffer3[0];
         if (nextDataBlock == 0) {
             // no more blocks, end of file
             rv = 1;
@@ -583,7 +624,7 @@ eFile_ReadNext(char *pt) {       // get next byte
     }
 
     // check for end of file
-    int bytesRemaining = (buffer3[3] << 8u) | buffer3[2];
+    bytesRemaining = (buffer3[3] << 8u) | buffer3[2];
     if (readIndex >= 508 - bytesRemaining) {
         rv = 1;
         goto exit;
@@ -594,6 +635,7 @@ eFile_ReadNext(char *pt) {       // get next byte
     readIndex++;
 
 exit:
+    OS_Signal(&SPIFree);
     return rv;
 }
 
@@ -604,6 +646,8 @@ exit:
 int
 eFile_RClose(void) { // close the file for writing
     int rv = 0;
+
+    OS_Wait(&SPIFree);
 
     if (!filesystem_initialized) {
         rv = 1;
@@ -618,6 +662,7 @@ eFile_RClose(void) { // close the file for writing
     reading = false;
 
 exit:
+    OS_Signal(&SPIFree);
     return rv;
 }
 
@@ -630,7 +675,12 @@ eFile_Delete(const char name[]) {  // remove this file
     int rv = 0;
     int length = 0;
     int dataBlockPtr, metadataBlockIndex;
+    int nextDataBlock;
+    int lastFreeBlock;
+    int firstFreeBlock;
     int i;
+
+    OS_Wait(&SPIFree);
 
     if (!filesystem_initialized) {
         rv = 1;
@@ -653,9 +703,7 @@ eFile_Delete(const char name[]) {  // remove this file
         goto exit;
     }
 
-    reading = true;
-
-    rv = eFile_Mount();
+    rv = eDisk_ReadBlock(buffer1, 0);
     if (rv == 1) goto exit;
 
     // find file in file index list
@@ -667,8 +715,8 @@ eFile_Delete(const char name[]) {  // remove this file
 
         rv = eDisk_ReadBlock(buffer2, metadataBlockIndex);
         if (rv == 1) goto exit;
-        
-        if (strncmp(name, buffer2 + 2, length) == 0) {
+
+        if (strncmp(name, (char*)(buffer2 + 2), length) == 0) {
             // found file
             dataBlockPtr = (buffer2[1] << 8u) | buffer2[0];
 
@@ -681,15 +729,15 @@ eFile_Delete(const char name[]) {  // remove this file
         rv = 1;
         goto exit;
     }
-    
+
     // delete file
 
-    int firstFreeBlock = (buffer1[1] << 8u) | buffer1[0];
+    firstFreeBlock = (buffer1[1] << 8u) | buffer1[0];
 
     // remove file from file index list
     buffer1[i] = 0;
     buffer1[i + 1] = 0;
-    
+
     // write file index list to flash
     rv = eDisk_WriteBlock(buffer1, 0);
     if (rv == 1) goto exit;
@@ -697,7 +745,7 @@ eFile_Delete(const char name[]) {  // remove this file
     // get last free block
     rv = eDisk_ReadBlock(buffer1, firstFreeBlock);
     if (rv == 1) goto exit;
-    int lastFreeBlock = (buffer1[3] << 8u) | buffer1[2];
+    lastFreeBlock = (buffer1[3] << 8u) | buffer1[2];
 
     // delete metadata block
     rv = insertFreeBlock(lastFreeBlock, metadataBlockIndex, firstFreeBlock);
@@ -708,7 +756,7 @@ eFile_Delete(const char name[]) {  // remove this file
     while (true) {
         rv = eDisk_ReadBlock(buffer1, dataBlockPtr);
         if (rv == 1) goto exit;
-        int nextDataBlock = (buffer1[1] << 8u) | buffer1[0];
+        nextDataBlock = (buffer1[1] << 8u) | buffer1[0];
 
         rv = insertFreeBlock(lastFreeBlock, dataBlockPtr, firstFreeBlock);
         if (rv == 1) goto exit;
@@ -722,6 +770,7 @@ eFile_Delete(const char name[]) {  // remove this file
     }
 
 exit:
+OS_Signal(&SPIFree);
     return rv;
 }
 
@@ -729,13 +778,15 @@ int
 eFile_PrintDirectory(void (*print)(char *)) {
     int rv = 0;
 
+    OS_Wait(&SPIFree);
+
     if (!filesystem_initialized) {
         rv = 1;
         goto exit;
     }
 
-    rv = eFile_Mount();
-    if(rv == 1) goto exit;
+    rv = eDisk_ReadBlock(buffer1, 0);
+    if (rv == 1) goto exit;
 
     for(int i = 2; i < sizeof(buffer1); i += 2) {
         int blockIndex = (buffer1[i + 1] << 8u) | buffer1[i];
@@ -746,9 +797,11 @@ eFile_PrintDirectory(void (*print)(char *)) {
         rv = eDisk_ReadBlock(buffer2, blockIndex);
         if (rv == 1) goto exit;
 
-        print(buffer2 + 2);
+        print((char*) (buffer2 + 2));
+        print("\r\n");
     }
 
 exit:
+    OS_Signal(&SPIFree);
     return rv;
 }
