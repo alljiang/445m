@@ -1,0 +1,9 @@
+.\timers.o: ..\drivers\timers.c
+.\timers.o: ..\utils/bit-utils.h
+.\timers.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stdint.h
+.\timers.o: ..\drivers\interrupt.h
+.\timers.o: ..\drivers\timers.h
+.\timers.o: ..\vware/tm4c123gh6pm.h
+.\timers.o: ..\RTOS/OS.h
+.\timers.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stdbool.h
+.\timers.o: ..\drivers\Launchpad.h

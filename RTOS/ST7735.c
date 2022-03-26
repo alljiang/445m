@@ -113,10 +113,10 @@
 
 #include <stdio.h>
 #include <stdint.h>
-#include <RTOS/eDisk.h>
-#include <RTOS/OS.h>
-#include <RTOS/ST7735.h>
-#include <str-utils.h>
+#include "RTOS/eDisk.h"
+#include "RTOS/OS.h"
+#include "RTOS/ST7735.h"
+#include "utils/str-utils.h"
 #include "vware/tm4c123gh6pm.h"
 // these defines are in two places, here and in eDisk.c
 #define SDC_CS_PB0 1

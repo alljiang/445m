@@ -1,7 +1,7 @@
 
 #include <stdint.h>
 #include "vware/tm4c123gh6pm.h"
-#include "bit-utils.h"
+#include "utils/bit-utils.h"
 
 #include "launchpad.h"
 
@@ -49,7 +49,7 @@ Launchpad_SetLED(enum LED_Color color, bool state) {
 
     if(color == LED_RED) {
 //        mask = generate_bit_mask_u32(1, 1);
-        mask = 0b10;
+        mask = 0x2;
         if(state) {
             PF1 |= mask;
         } else {
@@ -57,7 +57,7 @@ Launchpad_SetLED(enum LED_Color color, bool state) {
         }
     } else if(color == LED_GREEN) {
 //        mask = generate_bit_mask_u32(3, 1);
-        mask = 0b1000;
+        mask = 0x8;
         if(state) {
             PF3 |= mask;
         } else {
@@ -65,7 +65,7 @@ Launchpad_SetLED(enum LED_Color color, bool state) {
         }
     } else if(color == LED_BLUE) {
 //        mask = generate_bit_mask_u32(2, 1);
-        mask = 0b100;
+        mask = 0x4;
         if(state) {
             PF2 |= mask;
         } else {

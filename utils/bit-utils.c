@@ -5,7 +5,7 @@
  *      Author: Allen
  */
 
-#include "bit-utils.h"
+#include "utils/bit-utils.h"
 
 uint32_t
 generate_bit_mask_u32(uint32_t fieldLSBIndex, uint8_t fieldLength) {

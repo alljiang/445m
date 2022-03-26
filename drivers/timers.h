@@ -8,7 +8,7 @@ extern void
 SysTick_Init(unsigned long period);
 
 extern void
-SysTick_Handler();
+SysTick_Handler(void);
 
 extern void
 Timer0Init(void);

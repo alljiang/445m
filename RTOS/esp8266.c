@@ -1,1010 +1,611 @@
-// esp8266.c
-// Driver for ESP8266 module to act as a WiFi client or server
-// Currently restricted to one incoming or outgoing connection at a time
-//
-// Steven Prickett (steven.prickett@gmail.com)
-// Modified version by Dung Nguyen, Wally Guzman
-// Modified by Jonathan Valvano, March 28, 2017
-// Consolidated by Andreas Gerstlauer, April 6, 2020 
+// Lab5.c
+// Runs on LM4F120/TM4C123
+// Real Time Operating System for Lab 5
 
-/* 
-  THIS SOFTWARE IS PROVIDED "AS IS".  NO WARRANTIES, WHETHER EXPRESS, IMPLIED
-  OR STATUTORY, INCLUDING, BUT NOT LIMITED TO, IMPLIED WARRANTIES OF
-  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE APPLY TO THIS SOFTWARE.
-  VALVANO SHALL NOT, IN ANY CIRCUMSTANCES, BE LIABLE FOR SPECIAL, INCIDENTAL,
-  OR CONSEQUENTIAL DAMAGES, FOR ANY REASON WHATSOEVER.
-*/
+// Jonathan W. Valvano 3/29/17, valvano@mail.utexas.edu
+// Andreas Gerstlauer 3/1/16, gerstl@ece.utexas.edu
+// EE445M/EE380L.6 
+// You may use, edit, run or distribute this file 
+// You are free to change the syntax/organization of this file
 
-// NOTE: ESP8266 resources below:
-// General info and AT commands: http://nurdspace.nl/ESP8266
-// General info and AT commands: http://www.electrodragon.com/w/Wi07c
-// Community forum: http://www.esp8266.com/
-// Offical forum: http://bbs.espressif.com/
-// Example: http://zeflo.com/2014/esp8266-weather-display/
-// Flashing: http://www.xess.com/blog/esp8266-reflash/
+// LED outputs to logic analyzer for use by OS profile 
+// PF1 is preemptive thread switch
+// PF2 is first periodic background task (if any)
+// PF3 is second periodic background task (if any)
+// PC4 is PF4 button touch (SW1 task)
 
-/* Hardware connections
- Vcc is a separate regulated 3.3V supply with at least 215mA
- /------------------------------\
- |              chip      1   8 |
- | Ant                    2   7 |
- | enna       processor   3   6 |
- |                        4   5 |
- \------------------------------/ 
- Connects (#define below) TM4C123 on either UART1 (PB) or UART2 (PD)
- Reset (#define below) on either PB5 or PB1
- 
- ESP8266    TM4C123 
-  1 URxD    PB1/PD7   UART out of TM4C123, 115200 baud
-  2 GPIO0             +3.3V for normal operation (ground to flash)
-  3 GPIO2             +3.3V
-  4 GND     Gnd       GND (70mA)
-  5 UTxD    PB0/PD6   UART out of ESP8266, 115200 baud
-  6 Ch_PD             chip select, 10k resistor to 3.3V
-  7 Reset   PB5/PB1   TM4C123 can issue output low to cause hardware reset
-  8 Vcc               regulated 3.3V supply with at least 70mA
- */
+// Outputs for task profiling
+// PD0 is idle task
+// PD1 is button task
 
-#include <stdio.h>
-#include <stdbool.h>
+// Button inputs
+// PF0 is SW2 task
+// PF4 is SW1 button input
+
+// Analog inputs
+// PE3 Ain0 sampled at 2kHz, sequencer 3, by Interpreter, using software start
+
 #include <stdint.h>
-#include <string.h>
-#include <stdlib.h>
+#include <stdio.h> 
 #include "vware/tm4c123gh6pm.h"
 #include "vware/CortexM.h"
-#include <RTOS/esp8266.h>
-#include <RTOS/FIFO.h>
-#include <RTOS/UART0int.h>
-#include <RTOS/WifiSettings.h>  // access point parameters
+#include "vware/LaunchPad.h"
+#include "vware/PLL.h"
+#include "vware/LPF.h"
+#include "RTOS/UART0int.h"
+#include "RTOS/ADC.h"
+#include "RTOS/OS.h"
+#include "RTOS/heap.h"
+#include "RTOS/Interpreter.h"
+#include "RTOS/ST7735.h"
+#include "RTOS/eDisk.h"
+#include "RTOS/eFile.h"
 
-/*
-===========================================================
-==========          CONSTANTS                    ==========
-===========================================================
-*/
+#include "drivers/gpio.h"
+#include "drivers/launchpad.h"
 
-// #define ESP8266_PB_RST   5  // PB5
-#define ESP8266_PB_RST   1  // PB1
+uint32_t NumCreated;   // number of foreground threads created
+uint32_t IdleCount;    // CPU idle counter
 
-// #define ESP8266_UART     1   // UART1: PB1/PB0
-#define ESP8266_UART     2   // UART2: PD7/PB6
+//---------------------User debugging-----------------------
+extern int32_t MaxJitter;             // largest time jitter between interrupts in usec
 
-// #define USE_UART_DRV  // Use external UART driver (only works with UART1)
+#define PD0  (*((volatile uint32_t *)0x40007004))
+#define PD1  (*((volatile uint32_t *)0x40007008))
+#define PD2  (*((volatile uint32_t *)0x40007010))
+#define PD3  (*((volatile uint32_t *)0x40007020))
 
-#define FIFOSIZE    1024      // size of the FIFOs (must be power of 2)
-#define FIFOSUCCESS 1         // return value on success
-#define FIFOFAIL    0         // return value on failure
-
-#define MAXTRY 1              // number of attempts to send command
-
-// ESP responses
-static const char ESP8266_READY_RESPONSE[] = "\r\nready\r\n";
-static const char ESP8266_OK_RESPONSE[] = "\r\nOK\r\n";
-static const char ESP8266_ERROR_RESPONSE[] = "\r\nERROR\r\n";
-static const char ESP8266_FAIL_RESPONSE[] = "\r\nFAIL\r\n";
-static const char ESP8266_SENDOK_RESPONSE[] = "\r\nSEND OK\r\n";
-
-/*
-=============================================================
-==========            GLOBAL VARIABLES             ==========
-=============================================================
-*/
-
-// Globals for UART driver
-bool ESP8266_EchoResponse = false;
-bool ESP8266_EchoCommand = false;
-
-// UART receive control/data & transmit FIFOs (see FIFO.h)
-AddIndexFifo(ESP8266Rx, FIFOSIZE, char, FIFOSUCCESS, FIFOFAIL)
-AddIndexFifo(ESP8266Rx0, FIFOSIZE, char, FIFOSUCCESS, FIFOFAIL)
-#ifndef USE_UART_DRV  
-AddIndexFifo(ESP8266Tx, FIFOSIZE, char, FIFOSUCCESS, FIFOFAIL)
-#endif
-
-// ESP8266 state
-uint16_t ESP8266_Server = 0;   // server port, if any   
-uint16_t ESP8266_ConnectionMux = 0;
-uint16_t ESP8266_Segment = 0;  // last segment ID for buffered send
-
-/*
-=======================================================================
-==========              helper FUNCTIONS                     ==========
-=======================================================================
-*/
-
-// make letter lower-case
-char lc(char letter){
-  if((letter>='A')&&(letter<='Z')) letter |= 0x20;
-  return letter;
+void PortD_Init(void){ 
+  SYSCTL_RCGCGPIO_R |= 0x08;       // activate port D
+  while((SYSCTL_RCGCGPIO_R&0x08)==0){};      
+  GPIO_PORTD_DIR_R |= 0x0F;        // make PD3-0 output heartbeats
+  GPIO_PORTD_AFSEL_R &= ~0x0F;     // disable alt funct on PD3-0
+  GPIO_PORTD_DEN_R |= 0x0F;        // enable digital I/O on PD3-0
+  GPIO_PORTD_PCTL_R = ~0x0000FFFF;
+  GPIO_PORTD_AMSEL_R &= ~0x0F;;    // disable analog functionality on PD
 }
 
-//---------DelayMs-----
-// Busy wait n milliseconds
-// Input: time to wait in msec
-// Outputs: none
-void DelayMs(uint32_t n){
-  volatile uint32_t time;
-  while(n){
-    time = 6665;  // 1msec, tuned at 80 MHz
-    while(time){
-      time--;
+
+//------------------Task 1--------------------------------
+// background thread executes with SW1 button
+// one foreground task created with button push
+
+// ***********ButtonWork*************
+void ButtonWork(void){  heap_stats_t heap;
+  uint32_t myId = OS_Id(); 
+  PD1 ^= 0x02;
+  if(Heap_Stats(&heap)) OS_Kill();
+  PD1 ^= 0x02;
+  ST7735_Message(1,0,"Heap size  =",heap.size); 
+  ST7735_Message(1,1,"Heap used  =",heap.used);  
+  ST7735_Message(1,2,"Heap free  =",heap.free);
+  ST7735_Message(1,3,"Heap waste =",heap.size - heap.used - heap.free);
+  PD1 ^= 0x02;
+  OS_Kill();  // done, OS does not return from a Kill
+} 
+
+//************SW1Push*************
+// Called when SW1 Button pushed
+// Adds another foreground task
+// background threads execute once and return
+void SW1Push(void){
+  if(OS_MsTime() > 20){ // debounce
+    if(OS_AddThread(&ButtonWork,100,2)){
+      NumCreated++; 
     }
-    n--;
+    OS_ClearMsTime();  // at least 20ms between touches
   }
 }
 
-const char ReceiveDataSearchString[]="+IPD,";
-static uint32_t ReceiveDataSearchIndex = 0;
-static uint32_t ReceiveDataState = 1;     // 0 to disable filtering
-static uint32_t ReceiveDataStream = 0;    // connection ID for received data
-static uint32_t ReceiveDataLen = 0;       // receive data packet remaining size
-volatile uint32_t ESP8266_DataAvailable = 0;  // received data (about to be) available
-volatile uint32_t ESP8266_DataLoss = 0;       // lost data (for debugging)
-
-//-------------------ReceiveDataFilter -------------------
-// State machine to filter out received data stream from UART Rx input
-// Inputs: character to check 
-// Outputs: true if data was filtered out, false otherwise
-bool ReceiveDataFilter(char letter){
-  switch(ReceiveDataState) {  // Filter FSM
-    case 4:   // filter out data and put it into the right receive FIFO
-      if(ReceiveDataLen) {
-        switch(ReceiveDataStream) {
-          case 0: if(ESP8266Rx0Fifo_Put(letter) == FIFOFAIL){  // overflow, data loss
-                    ESP8266_DataAvailable--;
-                    ESP8266_DataLoss++;
-                  } 
-                  break;  
-          // only one connection currently supported
-        }          
-        ReceiveDataLen--;
-        return true;
-      }
-      ReceiveDataState = 1;   // restart    
-      // fall through to start searching again if data is done
-    case 1:  // Look for +IPD
-      if (letter == ReceiveDataSearchString[ReceiveDataSearchIndex]){ // match letter?
-        ReceiveDataSearchIndex++;
-        if(ReceiveDataSearchString[ReceiveDataSearchIndex] == 0){ // end of match string?
-          if(ESP8266_ConnectionMux) {
-            ReceiveDataState = 2;
-          } else {
-            ReceiveDataState = 3;
-          }
-          ReceiveDataSearchIndex = 0;
-          ReceiveDataStream = 0;
-          ReceiveDataLen = 0;
-        }
-      } else {
-        ReceiveDataSearchIndex = 0; // start over
-      }
-      return false;
-    case 2:  // look for connection ID (separated by comma)
-      if(letter >= '0' && letter <= '9') {
-        ReceiveDataStream = ReceiveDataStream * 10 + (letter - '0');  // add digit to ID    
-      } else if (letter == ',') {
-        ReceiveDataState = 3;   // ID completed, move on
-      } else {
-        ReceiveDataStream = 0;
-        ReceiveDataState = 1;   // error, start over
-      }
-      return false;
-    case 3:   // look for receive data size (separated by colon)
-      if(letter >= '0' && letter <= '9') {
-        ReceiveDataLen = ReceiveDataLen * 10 + (letter - '0');  // add digit to length    
-      } else if(letter == ':') {
-        ReceiveDataState = 4;   // size complete, move on
-        ESP8266_DataAvailable += ReceiveDataLen; // mark as becoming available
-      } else {
-        ReceiveDataStream = 0;
-        ReceiveDataLen = 0;
-        ReceiveDataState = 1;   // error, start over
-      }
-      return false;
-  } 
-  return false;
-}
-
-/*
-======================================================================
-==========         UART and private FUNCTIONS               ==========
-======================================================================
-*/
-
-// Preprocessor magic to construct UARTx_ identifiers
-#define STR(x)  #x
-#define CONCAT(x,y,z) x ## y ## z
-
-#define UART_STR(uart)  "UART" STR(uart) 
-#define UART_NAME(uart,identifier)  CONCAT(UART,uart,identifier)
-
-#define UART_ESP8266(identifier) UART_NAME(ESP8266_UART,identifier)
-
-#ifdef USE_UART_DRV
-
-#if ESP8266_UART==1
-#include "vware/UART1.h"
-#elif ESP8266_UART==2
-#include "vware/UART2.h"
-#endif
-
-//--------ESP8266_InitUart--------
-// Intializes uart needed to communicate with esp8266
-// Configure UART for 115200bps operation
-// Inputs: none
-// Outputs: none
-void ESP8266_InitUART(int rx_echo, int tx_echo){ 
-  ESP8266RxFifo_Init();
-  ESP8266Rx0Fifo_Init();  
-  ESP8266_EchoResponse = rx_echo;
-  ESP8266_EchoCommand = tx_echo;
-  UART_ESP8266(_Init)(BAUDRATE);
-}
-
-//--------ESP8266_OutChar--------
-// Prints a character to the esp8226 via uart
-// Inputs: character to transmit
-// Outputs: none
-void ESP8266_OutChar(char data){
-    UART_ESP8266(_OutChar)(data);
-    if(ESP8266_EchoCommand) UART_OutChar(data); // echo debugging
-}
-
-//--------ESP8266_EnableInterrupt--------
-// Enables uart interrupt
-// Inputs: none
-// Outputs: none
-void ESP8266_EnableInterrupt(void){
-  UART_ESP8266(_EnableRXInterrupt)();
-}
-
-//--------ESP8266_DisableInterrupt--------
-// Disables uart interrupt
-// Inputs: none
-// Outputs: none
-void ESP8266_DisableInterrupt(void){
-  UART_ESP8266(_DisableRXInterrupt)();
-}
-
-//----------ESP8266RxToBuffer----------
-// Copies uart fifo to RX buffer (software defined FIFO)
-// Inputs: none
-// Outputs:none
-void static ESP8266RxToBuffer(void){
-  char letter;
-  while(((UART_ESP8266(_FR_R)&UART_FR_RXFE) == 0) && (ESP8266RxFifo_Size() < (FIFOSIZE - 1))){
-    letter = UART_ESP8266(_DR_R);
-    if(ESP8266_EchoResponse){
-      UART_OutCharNonBlock(letter); // echo
+//************SW2Push*************
+// Called when SW2 Button pushed
+// Adds another foreground task
+// background threads execute once and return
+void SW2Push(void){
+  if(OS_MsTime() > 20){ // debounce
+    if(OS_AddThread(&ButtonWork,100,2)){
+      NumCreated++; 
     }
-    if(!ReceiveDataFilter(letter)) {
-      ESP8266RxFifo_Put(letter);
-    }
+    OS_ClearMsTime();  // at least 20ms between touches
   }
 }
 
-//----------UART_Handler----------
-// At least one of three things has happened:
-// hardware RX FIFO goes from 1 to 2 or more items
-// UART receiver has timed out
-void UART_ESP8266(_Handler)(void){
-  if(UART_ESP8266(_RIS_R)&UART_RIS_RXRIS){       // hardware RX FIFO >= 2 items
-    UART_ESP8266(_ICR_R) = UART_ICR_RXIC;        // acknowledge RX FIFO
-    ESP8266RxToBuffer();
-  }
-  if(UART_ESP8266(_RIS_R)&UART_RIS_RTRIS){       // receiver timed out
-    UART_ESP8266(_ICR_R) = UART_ICR_RTIC;        // acknowledge receiver time out
-    ESP8266RxToBuffer();
-  }
-}
+//--------------end of Task 1-----------------------------
 
-#else
-
-//------------------- ESP8266InitUART-------------------
-// Intializes uart needed to communicate with esp8266
-// Configure UART for 115200bps operation
-// Inputs: RX and/or TX echo for debugging
-// Outputs: none
-void ESP8266_InitUART(int rx_echo, int tx_echo){ volatile int delay;
-  ESP8266TxFifo_Init();
-  ESP8266RxFifo_Init();
-  ESP8266Rx0Fifo_Init();  
-  ESP8266_EchoResponse = rx_echo;
-  ESP8266_EchoCommand = tx_echo;
-#if ESP8266_UART==1
-  SYSCTL_RCGCUART_R |= 0x02; // Enable UART1
-  while((SYSCTL_PRUART_R&0x02)==0){};
-  SYSCTL_RCGCGPIO_R |= 0x02; // Enable PORT B clock gating
-  while((SYSCTL_PRGPIO_R&0x02)==0){};
-  GPIO_PORTB_AFSEL_R |= 0x03;
-  GPIO_PORTB_PCTL_R =(GPIO_PORTB_PCTL_R&0xFF0FFF00)|0x00000011;
-  GPIO_PORTB_DEN_R   |= 0x23; //23
-  GPIO_PORTB_DATA_R |= 0x20; // reset high
-#else
-  SYSCTL_RCGCUART_R |= 0x04; // Enable UART2
-  while((SYSCTL_PRUART_R&0x04)==0){};
-  SYSCTL_RCGCGPIO_R |= 0x0A; // Enable PORT B,D clock gating
-  while((SYSCTL_PRGPIO_R&0x08)==0){}; 
-  GPIO_PORTD_LOCK_R = 0x4C4F434B;   // 2) unlock GPIO Port D
-  GPIO_PORTD_CR_R = 0xFF;           // allow changes to PD7
-  GPIO_PORTD_AFSEL_R |= 0xC0; // PD7,PD6 UART2
-  GPIO_PORTD_PCTL_R =(GPIO_PORTD_PCTL_R&0x00FFFFFF)|0x11000000;
-  GPIO_PORTD_DEN_R   |= 0xC0; //PD6,PD7 UART2 
-#endif  
-  UART_ESP8266(_CTL_R) &= ~UART_CTL_UARTEN;                  // Clear UART enable bit during config
-  UART_ESP8266(_IBRD_R) = (80000000/16)/BAUDRATE;   
-  UART_ESP8266(_FBRD_R) = ((64*((80000000/16)%BAUDRATE))+BAUDRATE/2)/BAUDRATE;      
-// UART_ESP8266(_IBRD_R) = 43;   // IBRD = int(80,000,000 / (16 * 115,200)) = int(43.403)
-// UART_ESP8266(_FBRD_R) = 26;   // FBRD = round(0.4028 * 64 ) = 26
-  UART_ESP8266(_LCRH_R) = (UART_LCRH_WLEN_8|UART_LCRH_FEN);  // 8 bit word length, 1 stop, no parity, FIFOs enabled
-  UART_ESP8266(_IFLS_R) &= ~0x3F;                            // Clear TX and RX interrupt FIFO level fields
-  UART_ESP8266(_IFLS_R) += (UART_IFLS_TX1_8|UART_IFLS_RX1_8);// RX and TX FIFO interrupt threshold >= 1/8th full
-  UART_ESP8266(_IM_R)  |= (UART_IM_RXIM|UART_IM_TXIM|UART_IM_RTIM); // Enable interupt on TX, RX and RX transmission end
-  UART_ESP8266(_CTL_R) |= (UART_CTL_UARTEN|UART_CTL_RXE|UART_CTL_TXE); // Set UART enable bit 
-}
-
-//--------ESP8266_EnableInterrupt--------
-// Enables uart interrupt
-// Inputs: none
-// Outputs: none
-void ESP8266_EnableInterrupt(void){
-#if ESP8266_UART==1
-  NVIC_PRI1_R = (NVIC_PRI1_R&0xFF00FFFF)|0x00400000; // bits 21-23
-  NVIC_EN0_R = 1<<6;           // enable interrupt 6 in NVIC
-#else
-  NVIC_PRI8_R = (NVIC_PRI1_R&0xFFFF00FF)|0x00004000; // bits 15-13
-  NVIC_EN1_R = 1<<1;           // enable interrupt 33 in NVIC
-#endif    
-}
-
-//--------ESP8266_DisableInterrupt--------
-// Disables uart interrupt
-// Inputs: none
-// Outputs: none
-void ESP8266_DisableInterrupt(void){
-#if ESP8266_UART==1
-  NVIC_DIS0_R = 1<<6;           // disable interrupt 6 in NVIC
-#else
-  NVIC_DIS1_R = 1<<1;           // disable interrupt 33 in NVIC
-#endif    
-}
-
-//----------ESP8266BufferToTx----------
-// Copies TX buffer (software defined FIFO) to uart
-// Inputs: none
-// Outputs:none
-void static ESP8266BufferToTx(void){
-  char letter;
-  while(((UART_ESP8266(_FR_R)&UART_FR_TXFF) == 0) && (ESP8266TxFifo_Size() > 0)){
-    ESP8266TxFifo_Get(&letter);
-    if(ESP8266_EchoCommand){
-      UART_OutCharNonBlock(letter); // echo
-    }
-    UART_ESP8266(_DR_R) = letter;
+//------------------Idle Task--------------------------------
+// foreground thread, runs when nothing else does
+// never blocks, never sleeps, never dies
+// inputs:  none
+// outputs: none
+void Idle(void){
+  IdleCount = 0;          
+  while(1) {
+    IdleCount++;
+    PD0 ^= 0x01;
+    WaitForInterrupt();
   }
 }
 
-//----------ESP8266RxToBuffer----------
-// Copies uart fifo to RX buffer (software defined FIFO)
-// Inputs: none
-// Outputs:none
-void static ESP8266RxToBuffer(void){
-  char letter;
-  while(((UART_ESP8266(_FR_R)&UART_FR_RXFE) == 0) && (ESP8266RxFifo_Size() < (FIFOSIZE - 1))){
-    letter = UART_ESP8266(_DR_R);
-    if(ESP8266_EchoResponse){
-      UART_OutCharNonBlock(letter); // echo
-    }
-    if(!ReceiveDataFilter(letter)) {
-      ESP8266RxFifo_Put(letter);
-    }
-  }
-}
+//--------------end of Idle Task-----------------------------
 
-//----------UART_Handler----------
-// At least one of three things has happened:
-// hardware TX FIFO goes from 3 to 2 or less items
-// hardware RX FIFO goes from 1 to 2 or more items
-// UART receiver has timed out
-void UART_ESP8266(_Handler)(void){
-  if(UART_ESP8266(_RIS_R)&UART_RIS_TXRIS){       // hardware TX FIFO <= 2 items
-    UART_ESP8266(_ICR_R) = UART_ICR_TXIC;        // acknowledge TX FIFO
-    ESP8266BufferToTx();
-    if(ESP8266TxFifo_Size() == 0){               // software TX FIFO is empty
-      UART_ESP8266(_IM_R) &= ~UART_IM_TXIM;      // disable TX FIFO interrupt
-    }
-  }
-  if(UART_ESP8266(_RIS_R)&UART_RIS_RXRIS){       // hardware RX FIFO >= 2 items
-    UART_ESP8266(_ICR_R) = UART_ICR_RXIC;        // acknowledge RX FIFO
-    ESP8266RxToBuffer();
-  }
-  if(UART_ESP8266(_RIS_R)&UART_RIS_RTRIS){       // receiver timed out
-    UART_ESP8266(_ICR_R) = UART_ICR_RTIC;        // acknowledge receiver time out
-    ESP8266RxToBuffer();
-  }
-}
+//*******************final user main DEMONTRATE THIS TO TA**********
+int realmain(void){ // realmain
+  OS_Init();        // initialize, disable interrupts
+  PortD_Init();     // debugging profile
+  MaxJitter = 0;    // in 1us units
+	
+  // hardware init
+  //ADC_Init(0);  // sequencer 3, channel 0, PE3, sampling in Interpreter
 
-//--------ESP8266_OutChar--------
-// Prints a character to the esp8226 via uart
-// Inputs: character to transmit
-// Outputs: none
-void ESP8266_OutChar(char data){
-  while(ESP8266TxFifo_Put(data) == FIFOFAIL){};
-  UART_ESP8266(_IM_R) &= ~UART_IM_TXIM;          // disable TX FIFO interrupt
-  ESP8266BufferToTx();
-  UART_ESP8266(_IM_R) |= UART_IM_TXIM;           // enable TX FIFO interrupt
-}
-
-#endif
-
-//--------ESP8266_InChar--------
-// Read a character from the esp8226 via uart
-// Inputs: none
-// Outputs: character received
-char ESP8266_InChar(void){ char letter;
-  while(ESP8266RxFifo_Get(&letter) == FIFOFAIL){};
-  return(letter);
-}
-
-//---------ESP8266_SendCommand-----
-// Sends a string to the esp8266 module
-// Inputs: string to send (null-terminated)
-// Outputs: none
-void ESP8266_SendCommand(const char* command){
-  int index = 0;
-  while(command[index] != 0){
-    ESP8266_OutChar(command[index++]);
-  }
-}
-
-//---------ESP8266_WaitForResponse-----
-// Busy-wait until response found
-// Inputs: Success or failure strings to search for
-// Outputs: 1 on success, 0 on failure
-int ESP8266_WaitForResponse(const char *success, const char* failure) {
-  char d;
-  const char *s = success;
-  const char *f = failure;
-  while((!s || *s) && (!f || *f)) {   // end of search string reached?
-    d = ESP8266_InChar(); 
-    if(s && (d == *s)) {
-      s++;
-    } else {
-      s = success;  // start over
-      if(s && (d == *s)) s++;  // match first char?
-    }
-    if(f && (d == *f)) {
-      f++;
-    } else {
-      f = failure;  // start over
-      if(f && (d == *f)) f++;  // match first char? 
-    }
-  }
-  if(failure && !(*f)) return FAILURE;
-  return SUCCESS;  
-}
-
-/*
-=======================================================================
-==========          ESP8266 PUBLIC FUNCTIONS                 ==========
-=======================================================================
-*/
-
-//-------------------ESP8266_Init --------------
-// Initializes the module
-// Inputs: RX and/or TX echo for debugging
-// Outputs: 1 for success, 0 for failure (no ESP detected)
-int ESP8266_Init(int rx_echo, int tx_echo){ char c; const char* s; uint32_t timer = 1;
-  // Disable interrupt during initialization
-  ESP8266_DisableInterrupt();
+  //Heap_Init();  // initialize heap
   
-  // Initialize UART to communicate with ESP
-  ESP8266_InitUART(rx_echo, tx_echo);
-  
-  // Initialize reset port
-  GPIO_PORTB_DIR_R |= (0x01 << ESP8266_PB_RST); // PB output to reset
-  GPIO_PORTB_PCTL_R =GPIO_PORTB_PCTL_R & ~(0x0F << (ESP8266_PB_RST*4));
-  GPIO_PORTB_DEN_R |= (0x01 << ESP8266_PB_RST); //PB output 
+  // attach background tasks
+  //OS_AddPeriodicThread(&disk_timerproc,TIME_1MS,0);   // time out routines for disk  
+  //OS_AddSW1Task(&SW1Push,2);
+  //OS_AddSW2Task(&SW2Push,2);  
 
-  // Hard reset
-  GPIO_PORTB_DATA_R &= ~(0x01 << ESP8266_PB_RST); // reset low
-  DelayMs(10);
-  GPIO_PORTB_DATA_R |= (0x01 << ESP8266_PB_RST); // reset high
-  
-  // Wait for ready status with timeout
-  // Use low-level UART communication, interrupts disabled
-  s = ESP8266_READY_RESPONSE;
-  timer = 5000000;  // around a 1-2s total timeout
-  while(*s) {
-    while(timer && ((UART_ESP8266(_FR_R)&UART_FR_RXFE) != 0)) { timer--; }
-    if(!timer) break;  
-    c = (char)(UART_ESP8266(_DR_R)&0xFF);
-    if(rx_echo) UART_OutCharNonBlock(c); // echo, requires UART0 to be operational, will print garbage
-    if(c == *s) {
-      s++;
-    } else {
-      s = ESP8266_READY_RESPONSE;
-      if(c == *s) s++;
-    }
-  }
-  
-  // Finally enable interrupt
-  ESP8266_EnableInterrupt();
-  
-  if(!timer) return FAILURE;
-  return SUCCESS;
-}
-
-//-------------------ESP8266_Connect --------------
-// Bring interface up and connect to Wifi
-// Inputs: enable debug output
-// Outputs: 1 on success, 0 on failure
-int ESP8266_Connect(int verbose){
-  if(ESP8266_Reset()==FAILURE) return FAILURE; 
-    
-  if(verbose)  // debug output: MAC address oF ESP8266
-    ESP8266_GetMACAddress(); 
-
-#if SOFTAP
-  if(ESP8266_SoftAccessPoint(SSID_NAME,PASSKEY)==FAILURE) return FAILURE; 
-  if(ESP8266_SetWifiMode(ESP8266_WIFI_MODE_AP)==FAILURE) return FAILURE; 
-#else
-  if(ESP8266_SetWifiMode(ESP8266_WIFI_MODE_CLIENT)==FAILURE) return FAILURE; 
-
-  if(verbose)  // debug output: see APs in area
-    ESP8266_ListAccessPoints();
-
-  if(ESP8266_JoinAccessPoint(SSID_NAME,PASSKEY)==FAILURE) return FAILURE; 
-#endif
-
-  if(verbose)  // debug output: our IP address
-    ESP8266_GetIPAddress();
-  
-  return SUCCESS;
-}
-
-//-------------------ESP8266_StartServer --------------
-// Start server on specific port
-// Inputs: port and server timeout
-// Outputs: 1 on success, 0 on failure
-int ESP8266_StartServer(uint16_t port, uint16_t timeout){
-  if(ESP8266_SetConnectionMux(1)==FAILURE) return FAILURE;
-  if(ESP8266_EnableServer(port)==FAILURE) return FAILURE;
-  if(ESP8266_SetServerTimeout(timeout)==FAILURE) return FAILURE; 
-  return SUCCESS;
-}
-
-//-------------------ESP8266_StopServer --------------
-// Stop server and set to single-client mode
-// Inputs: none
-// Outputs: 1 on success, 0 on failure
-int ESP8266_StopServer(void){
-  if(ESP8266_DisableServer()==FAILURE) return FAILURE;
-  if(ESP8266_SetConnectionMux(0)==FAILURE) return FAILURE;
-  return SUCCESS;
-}
-
-//----------ESP8266_Reset------------
-// Soft resets the esp8266 module
-// Input:  none
-// Output: 1 if success, 0 if fail
-int ESP8266_Reset(void){ int try=MAXTRY;
-  while(try){
-    ESP8266_SendCommand("AT+RST\r\n");
-    if(ESP8266_WaitForResponse(ESP8266_READY_RESPONSE,0)) return SUCCESS;
-    try--;
-  }
-  return FAILURE; 
-}
-
-//---------ESP8266_Restore-----
-// Restore the ESP8266 module to default values
-// Inputs: none
-// Outputs: 1 if success, 0 if fail
-int ESP8266_Restore(void) { int try=MAXTRY;
-  while(try){
-  	ESP8266_SendCommand("AT+RESTORE\r\n");
-    if(ESP8266_WaitForResponse(ESP8266_READY_RESPONSE,0)) return SUCCESS;
-    try--;
-  }
-  return FAILURE; 
-}
-
-
-//---------ESP8266_GetVersionNumber----------
-// Get status
-// Input: none
-// Output: 1 if success, 0 if fail 
-int ESP8266_GetVersionNumber(void){ int try=MAXTRY;
-  while(try){
-    ESP8266_SendCommand("AT+GMR\r\n");
-    if(ESP8266_WaitForResponse(ESP8266_OK_RESPONSE,0)) return SUCCESS;
-    try--;
-  }
-  return 0; // fail
-}
-
-//---------ESP8266_GetMACAddress----------
-// Get MAC address
-// Input: none
-// Output: 1 if success, 0 if fail 
-int ESP8266_GetMACAddress(void){ int try=MAXTRY;
-  while(try){
-    ESP8266_SendCommand("AT+CIPSTAMAC?\r\n");
-    if(ESP8266_WaitForResponse(ESP8266_OK_RESPONSE,0)) return SUCCESS;
-    try--;
-  }
-  return 0; // fail
-}
-
-//---------ESP8266_SetWifiMode----------
-// Configures the esp8266 to operate as a wifi client, access point, or both
-// Input: mode accepts ESP8266_WIFI_MODE constants
-// Output: 1 if success, 0 if fail 
-int ESP8266_SetWifiMode(uint8_t mode){ int try=MAXTRY;
-  char TXBuffer[32];
-  while(try){
-    sprintf(TXBuffer, "AT+CWMODE=%d\r\n", mode);
-    ESP8266_SendCommand(TXBuffer);
-    if(ESP8266_WaitForResponse(ESP8266_OK_RESPONSE,0)) return SUCCESS;
-    try--;
-  }
-  return FAILURE; 
-}
+  // create initial foreground threads
+  NumCreated = 0;
+  NumCreated += OS_AddThread(&Interpreter,128,2); 
+  NumCreated += OS_AddThread(&Idle,128,5);  // at lowest priority 
  
-//---------ESP8266_SetConnectionMux----------
-// Enables the esp8266 connection mux, required for starting tcp server
-// Input: 0 (single) or 1 (multiple)
-// Output: 1 if success, 0 if fail 
-int ESP8266_SetConnectionMux(uint8_t enabled){ int try=MAXTRY;
-  char TXBuffer[32];
-  while(try){
-    sprintf(TXBuffer, "AT+CIPMUX=%d\r\n", enabled);
-    ESP8266_SendCommand(TXBuffer);
-    if(ESP8266_WaitForResponse(ESP8266_OK_RESPONSE,0)) {
-      ESP8266_ConnectionMux = enabled;
-      return SUCCESS;
+  OS_Launch(TIME_2MS); // doesn't return, interrupts enabled in here
+  return 0;            // this never executes
+}
+
+//+++++++++++++++++++++++++DEBUGGING CODE++++++++++++++++++++++++
+// ONCE YOUR RTOS WORKS YOU CAN COMMENT OUT THE REMAINING CODE
+// 
+
+//*****************File System Test*************************
+// Tests integration of FAT filesystem for Lab 5. This should succeed. 
+// Warning: this reformats the disk, all existing data will be lost
+void diskError(const char* errtype, uint32_t n){
+  printf(errtype);
+  printf(" disk error %u",n);
+  OS_Kill();
+}
+char const string1[]="Filename = %s";
+char const string2[]="File size = %lu bytes";
+char const string3[]="Number of Files = %u";
+char const string4[]="Number of Bytes = %lu";
+uint32_t FileTestRunning = 0; 
+void TestDirectory(void){ char *name; unsigned long size; 
+  unsigned int num;
+  unsigned long total;
+  num = 0;
+  total = 0;
+  printf("\n\r");
+  if(eFile_DOpen(""))           diskError("eFile_DOpen",0);
+  while(!eFile_DirNext(&name, &size)){
+    printf(string1, name);
+    printf("  ");
+    printf(string2, size);
+    printf("\n\r");
+    total = total+size;
+    num++;    
+  }
+  printf(string3, num);
+  printf("\n\r");
+  printf(string4, total);
+  printf("\n\r");
+  if(eFile_DClose())            diskError("eFile_DClose",0);
+}
+void TestFile(void){   int i; char data; 
+  printf("\n\rEE445M/EE380L, Lab 5 eFile test\n\r");
+  ST7735_DrawString(0, 1, "eFile test      ", ST7735_WHITE);
+  // simple test of eFile
+  if(eFile_Init())              diskError("eFile_Init",0); 
+  if(eFile_Mount())             diskError("eFile_Mount",0);
+  if(eFile_Format())            diskError("eFile_Format",0); 
+  TestDirectory();
+  if(eFile_Create("file1"))     diskError("eFile_Create",0);
+  if(eFile_WOpen("file1"))      diskError("eFile_WOpen",0);
+  for(i=0;i<1000;i++){
+    if(eFile_Write('a'+i%26))   diskError("eFile_Write",i);
+    if(i%52==51){
+      if(eFile_Write('\n'))     diskError("eFile_Write",i);  
+      if(eFile_Write('\r'))     diskError("eFile_Write",i);
     }
-    try--;
   }
-  return FAILURE;
+  if(eFile_WClose())            diskError("eFile_WClose",0);
+  TestDirectory();
+  if(eFile_ROpen("file1"))      diskError("eFile_ROpen",0);
+  for(i=0;i<1000;i++){
+    if(eFile_ReadNext(&data))   diskError("eFile_ReadNext",i);
+    UART_OutChar(data);
+  }
+  if(eFile_Delete("file1"))     diskError("eFile_Delete",0);
+  TestDirectory();
+  if(eFile_Unmount())           diskError("eFile_Unmount",0);
+  printf("Successful test\n\r");
+  ST7735_DrawString(0, 1, "eFile successful", ST7735_YELLOW);
+  FileTestRunning=0; // launch again
+  OS_Kill();
 }
 
-//---------ESP8266_ListAccessPoints----------
-// Lists available wifi access points
-// Input: none
-// Output: 1 if success, 0 if fail 
-int ESP8266_ListAccessPoints(void){ int try=MAXTRY;
-  while(try){
-    ESP8266_SendCommand("AT+CWLAP\r\n");
-    if(ESP8266_WaitForResponse(ESP8266_OK_RESPONSE,ESP8266_ERROR_RESPONSE)) return SUCCESS;
-    try--;
+void SWPushFile(void){
+  if(FileTestRunning==0){
+    FileTestRunning = 1;  // prevents you from starting two test threads
+    NumCreated += OS_AddThread(&TestFile,128,1);  // test eFile
   }
-  return FAILURE;
 }
 
-//----------ESP8266_JoinAccessPoint------------
-// Joins a wifi access point using specified ssid and password
-// Input:  SSID and PASSWORD
-// Output: 1 if success, 0 if fail
-int ESP8266_JoinAccessPoint(const char* ssid, const char* password){ int try=MAXTRY;
-  while(try){
-    ESP8266_SendCommand("AT+CWJAP=\"");
-    ESP8266_SendCommand(ssid);
-    ESP8266_SendCommand("\",\"");
-    ESP8266_SendCommand(password);
-    ESP8266_SendCommand("\"\r\n");    
-    if(ESP8266_WaitForResponse(ESP8266_OK_RESPONSE,ESP8266_FAIL_RESPONSE)) return SUCCESS;
-    try--;
-  }
-  return FAILURE; 
+int TestmainFile(void){   // TestmainFile
+  OS_Init();           // initialize, disable interrupts
+  PortD_Init();
+  FileTestRunning = 1; 
+
+  // attach background tasks
+  OS_AddPeriodicThread(&disk_timerproc,TIME_1MS,0);   // time out routines for disk
+  OS_AddSW1Task(&SWPushFile,2);    // PF4, SW1
+  OS_AddSW2Task(&SWPushFile,2);    // PF0, SW2
+  
+  // create initial foreground threads
+  NumCreated = 0;
+  NumCreated += OS_AddThread(&TestFile,128,1);  
+  NumCreated += OS_AddThread(&Idle,128,3); 
+ 
+  OS_Launch(10*TIME_1MS); // doesn't return, interrupts enabled in here
+  return 0;               // this never executes
 }
 
-// ----------ESP8266_QuitAccessPoint-------------
-// Disconnects from currently connected wifi access point
-// Inputs: none
-// Outputs: 1 if success, 0 if fail 
-int ESP8266_QuitAccessPoint(void){ int try=MAXTRY;
-  while(try){
-    ESP8266_SendCommand("AT+CWQAP\r\n");
-    if(ESP8266_WaitForResponse(ESP8266_OK_RESPONSE,0)) return SUCCESS;
-    try--;
+//*****************Test project 0*************************
+// This is the simplest configuration, 
+// Just see if you can import your OS
+// no UART interrupts
+// no SYSTICK interrupts
+// no timer interrupts
+// no switch interrupts
+// no ADC serial port or LCD output
+// no calls to semaphores
+uint32_t Count1;   // number of times thread1 loops
+uint32_t Count2;   // number of times thread2 loops
+uint32_t Count3;   // number of times thread3 loops
+void Thread1(void){
+  Count1 = 0;          
+  for(;;){
+    PD0 ^= 0x01;       // heartbeat
+    Count1++;
   }
-  return FAILURE; 
+}
+void Thread2(void){
+  Count2 = 0;          
+  for(;;){
+    PD1 ^= 0x02;       // heartbeat
+    Count2++;
+  }
+}
+void Thread3(void){
+  Count3 = 0;          
+  for(;;){
+    PD2 ^= 0x04;       // heartbeat
+    Count3++;
+  }
 }
 
-//----------ESP8266_ConfigureAccessPoint------------
-// Configures esp8266 wifi soft access point settings
-// Use this function only when in AP mode (and not in client mode)
-// Input:  SSID, Password, channel, security
-// Output: 1 if success, 0 if fail
-int ESP8266_ConfigureAccessPoint(const char* ssid, const char* password, uint8_t channel, uint8_t encryptMode){
-  int try=MAXTRY;
-  char TXBuffer[32];
-  while(try){
-    ESP8266_SendCommand("AT+CWSAP=\"");
-    ESP8266_SendCommand(ssid);
-    ESP8266_SendCommand("\",\"");
-    ESP8266_SendCommand(password);
-    sprintf(TXBuffer, "\",%d,%d\r\n", channel, encryptMode);
-    ESP8266_SendCommand(TXBuffer);
-    if(ESP8266_WaitForResponse(ESP8266_OK_RESPONSE,ESP8266_ERROR_RESPONSE)) return SUCCESS;
-    try--;
-  }
-  return FAILURE;
+int Testmain0(void){  // Testmain0
+  OS_Init();          // initialize, disable interrupts
+  PortD_Init();       // profile user threads
+  NumCreated = 0 ;
+  NumCreated += OS_AddThread(&Thread1,128,1); 
+  NumCreated += OS_AddThread(&Thread2,128,2); 
+  NumCreated += OS_AddThread(&Thread3,128,3); 
+  // Count1 Count2 Count3 should be equal or off by one at all times
+  OS_Launch(TIME_2MS); // doesn't return, interrupts enabled in here
+  return 0;            // this never executes
 }
 
-//---------ESP8266_GetIPAddress----------
-// Get local IP address
-// Input: none
-// Output: 1 if success, 0 if fail 
-int ESP8266_GetIPAddress(void){ int try=MAXTRY;
-  while(try){
-    ESP8266_SendCommand("AT+CIFSR\r\n");   
-    if(ESP8266_WaitForResponse(ESP8266_OK_RESPONSE,ESP8266_ERROR_RESPONSE)) return SUCCESS;
-    try--;
+//*****************Test project 1*************************
+// Heap test, allocate and deallocate memory
+void heapError(const char* errtype,const char* v,uint32_t n){
+  printf(errtype);
+  printf(" heap error %s%u",v,n);
+  OS_Kill();
+}
+heap_stats_t stats;
+void heapStats(void){
+  if(Heap_Stats(&stats))  heapError("Heap_Stats","",0);
+  ST7735_Message(1,0,"Heap size  =",stats.size); 
+  ST7735_Message(1,1,"Heap used  =",stats.used);  
+  ST7735_Message(1,2,"Heap free  =",stats.free);
+  ST7735_Message(1,3,"Heap waste =",stats.size - stats.used - stats.free);
+}
+int16_t* ptr;  // Global so easier to see with the debugger
+int16_t* p1;   // Proper style would be to make these variables local
+int16_t* p2;
+int16_t* p3;
+uint8_t* q1;
+uint8_t* q2;
+uint8_t* q3;
+uint8_t* q4;
+uint8_t* q5;
+uint8_t* q6;
+int16_t maxBlockSize;
+uint8_t* bigBlock;
+void TestHeap(void){  int16_t i;  
+  ST7735_DrawString(0, 0, "Heap test            ", ST7735_WHITE);
+  printf("\n\rEE445M/EE380L, Lab 5 Heap Test\n\r");
+  if(Heap_Init())         heapError("Heap_Init","",0);
+
+  ptr = Heap_Malloc(sizeof(int16_t));
+  if(!ptr)                heapError("Heap_Malloc","ptr",0);
+  *ptr = 0x1111;
+
+  if(Heap_Free(ptr))      heapError("Heap_Free","ptr",0);
+
+  ptr = Heap_Malloc(1);
+  if(!ptr)                heapError("Heap_Malloc","ptr",1);
+
+  if(Heap_Free(ptr))      heapError("Heap_Free","ptr",1);
+
+  p1 = (int16_t*) Heap_Malloc(1 * sizeof(int16_t));
+  if(!p1)                 heapError("Heap_Malloc","p",1);
+  p2 = (int16_t*) Heap_Malloc(2 * sizeof(int16_t));
+  if(!p2)                 heapError("Heap_Malloc","p",2);
+  p3 = (int16_t*) Heap_Malloc(3 * sizeof(int16_t));
+  if(!p3)                 heapError("Heap_Malloc","p",3);
+  p1[0] = 0xAAAA;
+  p2[0] = 0xBBBB;
+  p2[1] = 0xBBBB;
+  p3[0] = 0xCCCC;
+  p3[1] = 0xCCCC;
+  p3[2] = 0xCCCC;
+  heapStats();
+
+  if(Heap_Free(p1))       heapError("Heap_Free","p",1);
+  if(Heap_Free(p3))       heapError("Heap_Free","p",3);
+
+  if(Heap_Free(p2))       heapError("Heap_Free","p",2);
+  heapStats();
+
+  for(i = 0; i <= (stats.size / sizeof(int32_t)); i++){
+    ptr = Heap_Malloc(sizeof(int16_t));
+    if(!ptr) break;
   }
-  return FAILURE; 
+  if(ptr)                 heapError("Heap_Malloc","i",i);
+  heapStats();
+  
+  printf("Realloc test\n\r");
+  if(Heap_Init())         heapError("Heap_Init","",1);
+  q1 = Heap_Malloc(1);
+  if(!q1)                 heapError("Heap_Malloc","q",1);
+  q2 = Heap_Malloc(2);
+  if(!q2)                 heapError("Heap_Malloc","q",2);
+  q3 = Heap_Malloc(3);
+  if(!q3)                 heapError("Heap_Malloc","q",3);
+  q4 = Heap_Malloc(4);
+  if(!q4)                 heapError("Heap_Malloc","q",4);
+  q5 = Heap_Malloc(5);
+  if(!q5)                 heapError("Heap_Malloc","q",5);
+
+  *q1 = 0xDD;
+  q6 = Heap_Realloc(q1, 6);
+  heapStats();
+
+  for(i = 0; i < 6; i++){
+    q6[i] = 0xEE;
+  }
+  q1 = Heap_Realloc(q6, 2);
+  heapStats();
+
+  printf("Large block test\n\r");
+  if(Heap_Init())         heapError("Heap_Init","",2);
+  heapStats();
+  maxBlockSize = stats.free;
+  bigBlock = Heap_Malloc(maxBlockSize);
+  for(i = 0; i < maxBlockSize; i++){
+    bigBlock[i] = 0xFF;
+  }
+  heapStats();
+  if(Heap_Free(bigBlock)) heapError("Heap_Free","bigBlock",0);
+
+  bigBlock = Heap_Calloc(maxBlockSize);
+  if(!bigBlock)           heapError("Heap_Calloc","bigBlock",0);
+  if(*bigBlock)           heapError("Zero initialization","bigBlock",0);
+  heapStats();
+
+  if(Heap_Free(bigBlock)) heapError("Heap_Free","bigBlock",0);
+  heapStats();
+  
+  printf("Successful heap test\n\r");
+  ST7735_DrawString(0, 0, "Heap test successful", ST7735_YELLOW);
+  OS_Kill();
 }
 
-//---------ESP8266_SetSSLClientConfiguration----------
-// Set SSL client configuration
-// Requires certificates to be flashed into the ESP firmware
-// Inputs: enable/disable client/server certificate checks
-// output: 1 if success, 0 if fail 
-int ESP8266_SetSSLClientConfiguration(int verifyClient, int verifyServer){ int try=MAXTRY;
-  char TXBuffer[32];
-  while(try){
-    sprintf(TXBuffer, "AT+CIPSSLCCONF=%d\r\n", (verifyClient? 1 : 0) + (verifyServer? 2 : 0));
-    ESP8266_SendCommand(TXBuffer);
-    if(ESP8266_WaitForResponse(ESP8266_OK_RESPONSE,ESP8266_ERROR_RESPONSE)) return SUCCESS;
-    try--;
-  }
-  return FAILURE;
-}
-
-//---------ESP8266_SetSSLBufferSize----------
-// Set SSL buffer size
-// Inputs: buffer size between 2048 and 4096
-// output: 1 if success, 0 if fail 
-int ESP8266_SetSSLBufferSize(uint16_t bufferSize){ int try=MAXTRY;
-  char TXBuffer[32];
-  while(try){
-    sprintf(TXBuffer, "AT+CIPSSLSIZE=%d\r\n", bufferSize);
-    ESP8266_SendCommand(TXBuffer);
-    if(ESP8266_WaitForResponse(ESP8266_OK_RESPONSE,ESP8266_ERROR_RESPONSE)) return SUCCESS;
-    try--;
-  }
-  return FAILURE;
-}
-
-//---------ESP8266_MakeTCPConnection----------
-// Establish TCP or SSL connection
-// The ESP only seems to have limited SSL support, does not work with all servers
-// Inputs: IP address or web page as a string, port, and keepalive time (0 if none)
-// output: 1 if success, 0 if fail 
-int ESP8266_MakeTCPConnection(char *IPaddress, uint16_t port, uint16_t keepalive, int ssl){ int try=MAXTRY;
-  char TXBuffer[32];
-  while(try){
-    if(ssl){
-      ESP8266_SendCommand("AT+CIPSTART=\"SSL\",\"");
-    } else {
-      ESP8266_SendCommand("AT+CIPSTART=\"TCP\",\"");
+void SW1Push1(void){
+  if(OS_MsTime() > 20){ // debounce
+    if(OS_AddThread(&TestHeap,128,1)){
+      NumCreated++;
     }
-    ESP8266_SendCommand(IPaddress);
-    if(keepalive) {
-      sprintf(TXBuffer, "\",%d,%d\r\n", port, keepalive);
-    } else {
-      sprintf(TXBuffer, "\",%d\r\n", port);
+    OS_ClearMsTime();  // at least 20ms between touches
+  }
+}
+
+int Testmain1(void){   // Testmain1
+  OS_Init();           // initialize, disable interrupts
+  PortD_Init();
+
+  // attach background tasks
+  OS_AddSW1Task(&SW1Push1,2);
+    
+  // create initial foreground threads
+  NumCreated = 0 ;
+  NumCreated += OS_AddThread(&TestHeap,128,1);  
+  NumCreated += OS_AddThread(&Idle,128,3); 
+ 
+  OS_Launch(10*TIME_1MS); // doesn't return, interrupts enabled in here
+  return 0;               // this never executes
+}
+
+//*****************Test project 2*************************
+// Process management test, add and reclaim dummy process
+void TestUser(void){ uint32_t id; uint32_t time;
+  id = OS_Id();
+  PD2 ^= 0x04;
+  ST7735_Message(0,1, "Hello world: ", id);
+  time = OS_Time();
+  OS_Sleep(1000);
+  time = (((OS_TimeDifference(time, OS_Time()))/1000ul)*125ul)/10000ul;
+  ST7735_Message(0,2, "Sleep time: ", time);
+  PD2 ^= 0x04;
+  OS_Kill();
+}
+
+//  OS-internal OS_AddProcess function
+extern int OS_AddProcess(void(*entry)(void), void *text, void *data, 
+  unsigned long stackSize, unsigned long priority); 
+
+void TestProcess(void){ heap_stats_t heap1, heap2;
+  // simple process management test, add process with dummy code and data segments
+  ST7735_DrawString(0, 0, "Process test         ", ST7735_WHITE);
+  printf("\n\rEE445M/EE380L, Lab 5 Process Test\n\r");
+  PD1 ^= 0x02;
+  if(Heap_Stats(&heap1)) OS_Kill();
+  PD1 ^= 0x02;
+  ST7735_Message(1,0,"Heap size  =",heap1.size); 
+  ST7735_Message(1,1,"Heap used  =",heap1.used);  
+  ST7735_Message(1,2,"Heap free  =",heap1.free);
+  ST7735_Message(1,3,"Heap waste =",heap1.size - heap1.used - heap1.free);
+  PD1 ^= 0x02;
+  if(!OS_AddProcess(&TestUser,Heap_Calloc(128),Heap_Calloc(128),128,1)){
+    printf("OS_AddProcess error");
+    OS_Kill();
+  }
+  PD1 ^= 0x02;
+  OS_Sleep(2000); // wait long enough for user thread and hence process to exit/die
+  PD1 ^= 0x02;
+  if(Heap_Stats(&heap2)) OS_Kill();
+  PD1 ^= 0x02;
+  ST7735_Message(1,0,"Heap size  =",heap2.size); 
+  ST7735_Message(1,1,"Heap used  =",heap2.used);  
+  ST7735_Message(1,2,"Heap free  =",heap2.free);
+  ST7735_Message(1,3,"Heap waste =",heap2.size - heap2.used - heap2.free);
+  PD1 ^= 0x02;
+  if((heap1.free != heap2.free)||(heap1.used != heap2.used)){
+    printf("Process management heap error");
+    OS_Kill();
+  }
+  printf("Successful process test\n\r");
+  ST7735_DrawString(0, 0, "Process test successful", ST7735_YELLOW);
+  OS_Kill();  
+}
+
+void SW2Push2(void){
+  if(OS_MsTime() > 20){ // debounce
+    if(OS_AddThread(&TestProcess,128,1)){
+      NumCreated++;
     }
-    ESP8266_SendCommand(TXBuffer);   // open and connect to a socket
-    if(ESP8266_WaitForResponse(ESP8266_OK_RESPONSE,ESP8266_ERROR_RESPONSE)) return SUCCESS;
-    try--;
+    OS_ClearMsTime();  // at least 20ms between touches
   }
-  return FAILURE; 
 }
 
-//---------ESP8266_Send----------
-// Send a string to server 
-// Input: payload to send
-// Output: 1 if success, 0 if fail 
-int ESP8266_Send(const char* fetch){
-  char TXBuffer[32];
-  if(ESP8266_ConnectionMux) {
-    sprintf(TXBuffer, "AT+CIPSEND=%d,%d\r\n", 0, strlen(fetch));
-  } else {
-    sprintf(TXBuffer, "AT+CIPSEND=%d\r\n", strlen(fetch));
-  }
-  ESP8266_SendCommand(TXBuffer);  
-  if(!ESP8266_WaitForResponse(">",ESP8266_ERROR_RESPONSE)) return FAILURE;
-  ESP8266_SendCommand(fetch);
-  if(ESP8266_WaitForResponse(ESP8266_SENDOK_RESPONSE,ESP8266_ERROR_RESPONSE)) return SUCCESS;
-  return FAILURE; 
+int Testmain2(void){   // Testmain2 
+  OS_Init();           // initialize, disable interrupts
+  PortD_Init();
+
+  // attach background tasks
+  OS_AddSW1Task(&SW1Push1,2);  // PF4, SW1
+  OS_AddSW2Task(&SW2Push2,2);  // PF0, SW2
+  
+  // create initial foreground threads
+  NumCreated = 0;
+  NumCreated += OS_AddThread(&TestProcess,128,1);  
+  NumCreated += OS_AddThread(&Idle,128,3); 
+ 
+  OS_Launch(10*TIME_1MS); // doesn't return, interrupts enabled in here
+  return 0;               // this never executes
 }
 
-//---------ESP8266_SendBuffered----------
-// Send a string to server using ESP TCP-send buffer
-// Input: payload to send
-// Output: 1 if success, 0 if fail 
-int ESP8266_SendBuffered(const char* fetch){
-  char TXBuffer[32];
-  if(ESP8266_ConnectionMux) {
-    sprintf(TXBuffer, "AT+CIPSENDBUF=%d,%d\r\n", 0, strlen(fetch));
-  } else {
-    sprintf(TXBuffer, "AT+CIPSENDBUF=%d\r\n", strlen(fetch));
+//*****************Test project 3*************************
+// Test supervisor calls (SVC exceptions)
+// Using inline assembly, syntax is dependent on the compiler
+// The following code compiles in Keil 5.x (even though the UI complains)
+__asm uint32_t SVC_OS_Id(void){
+    SVC #0
+    BX  LR
   }
-  ESP8266_SendCommand(TXBuffer);  
-  if(!ESP8266_WaitForResponse(">",ESP8266_ERROR_RESPONSE)) return FAILURE;
-  ESP8266_Segment++;
-  ESP8266_SendCommand(fetch);
-  sprintf(TXBuffer, "Recv %d bytes", strlen(fetch));
-  if(ESP8266_WaitForResponse(TXBuffer,ESP8266_ERROR_RESPONSE)) return SUCCESS;
-  return FAILURE; 
+__asm void SVC_OS_Kill(void){
+    SVC #1
+    BX  LR
+  }
+__asm void SVC_OS_Sleep(uint32_t t){
+    SVC #2
+    BX  LR
+  }
+__asm uint32_t SVC_OS_Time(void){
+    SVC #3
+    BX  LR
+  }
+__asm int SVC_OS_AddThread(void(*t)(void), uint32_t s, uint32_t p){
+    SVC #4
+    BX  LR
+  }
+uint32_t line = 0;
+void TestSVCThread(void){ uint32_t id;	
+  id = SVC_OS_Id();
+  PD3 ^= 0x08;
+  ST7735_Message(0,line++, "Thread: ", id);
+  SVC_OS_Sleep(500);
+  ST7735_Message(0,line++, "Thread dying: ", id);
+  PD3 ^= 0x08;
+  SVC_OS_Kill();
+}
+void TestSVC(void){ uint32_t id; uint32_t time;
+  // simple SVC test, mimicking real user program
+  ST7735_DrawString(0, 0, "SVC test         ", ST7735_WHITE);
+  printf("\n\rEE445M/EE380L, Lab 5 SCV Test\n\r");
+  id = SVC_OS_Id();
+  PD2 ^= 0x04;
+  ST7735_Message(0,line++, "SVC test: ", id);
+  SVC_OS_AddThread(TestSVCThread, 128, 1);
+  time = SVC_OS_Time();
+  SVC_OS_Sleep(1000);
+  time = (((OS_TimeDifference(time, SVC_OS_Time()))/1000ul)*125ul)/10000ul;
+  ST7735_Message(0,line++, "Sleep time: ", time);
+  PD2 ^= 0x04;
+  if(line != 4) {
+    printf("SVC test error");
+    OS_Kill();
+  }
+  printf("Successful SVC test\n\r");
+  ST7735_Message(0,0, "SVC test done ", id);
+  SVC_OS_Kill();
 }
 
-//---------ESP8266_SendBufferedStatus----------
-// Check status of last buffered segment
-// Input: none
-// Output: 1 if success, 0 if fail 
-int ESP8266_SendBufferedStatus(void){
-  char OKBuffer[16];
-  char FailBuffer[24];
-  if(ESP8266_ConnectionMux) {
-    sprintf(OKBuffer, "\n%d,%d,SEND OK\r\n", 0, ESP8266_Segment);
-    sprintf(FailBuffer, "\n%d,%d,SEND FAIL\r\n", 0, ESP8266_Segment);
-  } else {
-    sprintf(OKBuffer, "\n%d,SEND OK\r\n", ESP8266_Segment);
-    sprintf(FailBuffer, "\n%d,SEND FAIL\r\n", ESP8266_Segment);
-  }
-  if(ESP8266_WaitForResponse(OKBuffer,FailBuffer)) return SUCCESS;
-  return FAILURE; 
-}
-
-//---------ESP8266_Receive----------
-// Receive a string from server 
-// Reads from data input until end of line or max length is reached
-// Input: buffer and max length
-// Output: 1 and null-terminated string if success, 0 if fail (disconnected)
-int ESP8266_Receive(char* fetch, uint32_t max){ long sr; const char* s;
-  char letter;
-  while(max > 1) {
-    if(ESP8266Rx0Fifo_Size() || ESP8266_DataAvailable) { // data (about to be) available?
-      while(ESP8266Rx0Fifo_Get(&letter) == FIFOFAIL){};
-      // ESP8266_DisableInterrupt();  // critical section
-      sr = StartCritical();  
-      if(ESP8266_DataAvailable) ESP8266_DataAvailable--;
-      EndCritical(sr); 
-      // ESP8266_EnableInterrupt();         
-      if(letter == '\r') continue;
-      if(letter == '\n') break;
-      *fetch = letter;
-      fetch++;
-      max--;
-    } else {  // wait for next packet or connection close
-      if(ESP8266_ConnectionMux) {
-        s = "0,CLOSED";
-      } else {
-        s = "CLOSED";
-      }
-      if(!ESP8266_WaitForResponse(ReceiveDataSearchString,s)){
-        *fetch = 0;       // connection closed
-        return FAILURE;
-      }
-      while(ESP8266_InChar() != ':') {}  // wait for DataAvailable to be updated
-    }        
-  }
-  *fetch = 0;  // terminate with null character
-  return SUCCESS;
-}
-
-//---------ESP8266_CloseTCPConnection----------
-// Close TCP connection 
-// Input: none
-// Output: 1 if success, 0 if fail 
-int ESP8266_CloseTCPConnection(void){ int try=MAXTRY;
-  while(try){
-    if(ESP8266_ConnectionMux) {
-      ESP8266_SendCommand("AT+CIPCLOSE=0\r\n");
-    } else {
-      ESP8266_SendCommand("AT+CIPCLOSE\r\n");
-    }      
-    if(ESP8266_WaitForResponse(ESP8266_OK_RESPONSE,ESP8266_ERROR_RESPONSE)) {
-      ESP8266Rx0Fifo_Init();  // Discard any data
-      return SUCCESS;
+void SWPush3(void){
+  if(line>=4){
+    line = 0;
+    if(OS_AddThread(&TestSVC,128,1)){
+      NumCreated++;
     }
-    try--;
   }
-  ESP8266Rx0Fifo_Init();  // Discard any data
-  return FAILURE;
 }
 
-//---------ESP8266_SetDataTransmissionMode----------
-// Set data transmission passthrough mode
-// Input: 0 not data mode, 1 data mode; return "Link is builded" 
-// Output: 1 if success, 0 if fail 
-int ESP8266_SetDataTransmissionMode(uint8_t mode){ int try=MAXTRY;
-  char TXBuffer[32];
-  while(try){
-    sprintf(TXBuffer, "AT+CIPMODE=%d\r\n", mode);
-    ESP8266_SendCommand(TXBuffer);
-    if(ESP8266_WaitForResponse(ESP8266_OK_RESPONSE,0)) return SUCCESS;
-    try--;
-  }
-  return FAILURE;
+int Testmain3(void){   // Testmain3 
+  OS_Init();           // initialize, disable interrupts
+  PortD_Init();
+
+  // attach background tasks
+  OS_AddSW1Task(&SWPush3,2);  // PF4, SW1
+  OS_AddSW2Task(&SWPush3,2);  // PF0, SW2
+  
+  // create initial foreground threads
+  NumCreated = 0;
+  NumCreated += OS_AddThread(&TestSVC,128,1);  
+  NumCreated += OS_AddThread(&Idle,128,3); 
+ 
+  OS_Launch(10*TIME_1MS); // doesn't return, interrupts enabled in here
+  return 0;               // this never executes
 }
 
-//---------ESP8266_GetStatus----------
-// Get network connection status
-// Input: none
-// Output: 1 if success, 0 if fail 
-int ESP8266_GetStatus(void){ int try=MAXTRY;
-  while(try){
-    ESP8266_SendCommand("AT+CIPSTATUS\r\n");
-    if(ESP8266_WaitForResponse(ESP8266_OK_RESPONSE,0)) return SUCCESS;
-    try--;
-  }
-  return FAILURE;
-}
-
-// --------ESP8266_EnableServer------------------
-// Enables tcp server on specified port
-// Inputs: port number
-// Outputs: 1 if success, 0 if fail
-int ESP8266_EnableServer(uint16_t port){  int try=MAXTRY;
-  char TXBuffer[32];
-  while(try){
-    sprintf(TXBuffer, "AT+CIPSERVER=1,%d\r\n", port);
-    ESP8266_SendCommand(TXBuffer);
-    if(ESP8266_WaitForResponse(ESP8266_OK_RESPONSE,0)) {
-      ESP8266_Server = port;
-      return SUCCESS;
-    }
-    try--;
-  }
-  return FAILURE;
-}
-
-// ----------ESP8266_SetServerTimeout--------------
-// Set connection timeout for tcp server, 0-28800 seconds
-// Inputs: timeout parameter
-// Outputs: 1 if success, 0 if fail
-int ESP8266_SetServerTimeout(uint16_t timeout){ int try=MAXTRY;
-  char TXBuffer[32];
-  while(try){
-    sprintf(TXBuffer, "AT+CIPSTO=%d\r\n", timeout);
-    ESP8266_SendCommand(TXBuffer);
-    if(ESP8266_WaitForResponse(ESP8266_OK_RESPONSE,ESP8266_ERROR_RESPONSE)) return SUCCESS;
-    try--;
-  }
-  return FAILURE;
-}
-
-// ----------ESP8266_WaitForConnection--------------
-// Wait for incoming connection on server
-// must ensure that no other ESP calls are done while waiting
-// this should really be done in the background interrupt handler
-// using a mailbox to communicate with this function
-// Inputs: none
-// Outputs: 1 if success, 0 if fail
-int ESP8266_WaitForConnection(void){
-  if(!ESP8266_ConnectionMux) return FAILURE;
-  if(!ESP8266_Server) return FAILURE;
-  if(ESP8266_WaitForResponse("0,CONNECT\r\n",0)) return SUCCESS;
-  return FAILURE;
-}
-
-//---------ESP8266_DisableServer----------
-// Disables tcp server
-// Input: none 
-// Output: 1 if success, 0 if fail 
-int ESP8266_DisableServer(void){ int try=MAXTRY;
-  while(try){
-    ESP8266_SendCommand("AT+CIPSERVER=0\r\n"); 
-    if(ESP8266_WaitForResponse(ESP8266_OK_RESPONSE,0)) {
-      ESP8266_Server = 0;
-      return SUCCESS;
-    }
-    try--;
-  }
-  return FAILURE;
+//*******************Trampoline for selecting main to execute**********
+int main(void) { 			// main
+	PLL_Init(Bus80MHz);
+	GPIO_Initialize();
+	Launchpad_PortFInitialize();
+	ST7735_InitR(INITR_GREENTAB);             // LCD initialization
+	UART_Init();                              // serial I/O for in
+	
+	realmain();
 }

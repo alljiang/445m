@@ -17,8 +17,8 @@
 #include <RTOS/UART0int.h>
 #include "vware/ADCT0ATrigger.h"
 #include "vware/ADCSWTrigger.h"
-#include <str-utils.h>
-#include <uart-utils.h>
+#include "utils/str-utils.h"
+#include "utils/uart-utils.h"
 
 #define EQ(a, b) (strcmp((a), (b)) == 0)
 
@@ -216,7 +216,7 @@ Interpreter_Parse(char *buffer) {
         UART_OutStringNonBlock(itoa_buf);
         UART_OutStringNonBlock((char*) str_newline);
     } else if (EQ(str_ls, token)) {
-        eFile_PrintDirectory(&UART_OutStringNonBlock);
+        //eFile_PrintDirectory(&UART_OutStringNonBlock);
     } else if (EQ(str_format, token)) {
         rv = eFile_Format();
         if (rv == 0) {

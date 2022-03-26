@@ -1,5 +1,5 @@
 #include <stdint.h>
-#include "bit-utils.h"
+#include "utils/bit-utils.h"
 #include "interrupt.h"
 #include "vware/tm4c123gh6pm.h"
 

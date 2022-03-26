@@ -15,7 +15,7 @@ enum LED_Color {
 };
 
 extern void
-Launchpad_PortFInitialize();
+Launchpad_PortFInitialize(void);
 
 extern void
 Launchpad_ToggleLED(enum LED_Color color);

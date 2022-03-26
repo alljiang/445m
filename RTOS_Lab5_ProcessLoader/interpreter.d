@@ -1,0 +1,16 @@
+.\interpreter.o: ..\RTOS\Interpreter.c
+.\interpreter.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stdint.h
+.\interpreter.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stdbool.h
+.\interpreter.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stdlib.h
+.\interpreter.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\string.h
+.\interpreter.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stdio.h
+.\interpreter.o: ..\RTOS/ADC.h
+.\interpreter.o: ..\RTOS/eDisk.h
+.\interpreter.o: ..\RTOS/eFile.h
+.\interpreter.o: ..\RTOS/OS.h
+.\interpreter.o: ..\RTOS/ST7735.h
+.\interpreter.o: ..\RTOS/UART0int.h
+.\interpreter.o: ..\vware/ADCT0ATrigger.h
+.\interpreter.o: ..\vware/ADCSWTrigger.h
+.\interpreter.o: ..\utils/str-utils.h
+.\interpreter.o: ..\utils/uart-utils.h

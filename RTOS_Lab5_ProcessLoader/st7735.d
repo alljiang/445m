@@ -1,0 +1,9 @@
+.\st7735.o: ..\RTOS\ST7735.c
+.\st7735.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stdio.h
+.\st7735.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stdint.h
+.\st7735.o: ..\RTOS/eDisk.h
+.\st7735.o: ..\RTOS/OS.h
+.\st7735.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stdbool.h
+.\st7735.o: ..\RTOS/ST7735.h
+.\st7735.o: ..\utils/str-utils.h
+.\st7735.o: ..\vware/tm4c123gh6pm.h

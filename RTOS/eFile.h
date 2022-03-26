@@ -118,3 +118,15 @@ eFile_Delete(const char name[]);  // remove this file
 
 int
 eFile_PrintDirectory(void (*print)(char *));
+
+int
+eFile_DOpen( const char name[]);
+
+int
+eFile_DirNext( char *name[], unsigned long *size);
+
+int
+eFile_DClose(void);
+
+int
+eFile_Unmount(void);

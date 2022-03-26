@@ -316,7 +316,7 @@ OS_Launch(uint32_t theTimeSlice);
 // scheduler for the RTOS
 // no inputs, no outputs
 void
-OS_Scheduler();
+OS_Scheduler(void);
 
 /**
  * @details open the file for writing, redirect stream I/O (printf) to this file

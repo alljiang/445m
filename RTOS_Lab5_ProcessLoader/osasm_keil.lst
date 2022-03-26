@@ -1,0 +1,461 @@
+
+
+
+ARM Macro Assembler    Page 1 
+
+
+    1 00000000         ;/******************************************************
+                       ***********************/
+    2 00000000         ;/* OSasm.s: low-level OS commands, written in assembly 
+                                             */
+    3 00000000         ;/* derived from uCOS-II                                
+                                             */
+    4 00000000         ;/******************************************************
+                       ***********************/
+    5 00000000         ;Jonathan Valvano, OS Lab2/3/4/5, 1/12/20
+    6 00000000         ;Students will implement these functions as part of EE44
+                       5M/EE380L.12 Lab
+    7 00000000         
+    8 00000000                 AREA             |.text|, CODE, READONLY, ALIGN=
+2
+    9 00000000                 THUMB
+   10 00000000                 REQUIRE8
+   11 00000000                 PRESERVE8
+   12 00000000         
+   13 00000000                 EXTERN           RunPt       ; currently running
+                                                             thread
+   14 00000000                 EXTERN           NextRunPt
+   15 00000000         
+   16 00000000                 EXPORT           StartOS
+   17 00000000                 EXPORT           ContextSwitch
+   18 00000000                 EXPORT           PendSV_Handler
+   19 00000000                 EXPORT           SVC_Handler
+   20 00000000         
+   21 00000000         
+   22 00000000 E000ED04 
+                       NVIC_INT_CTRL
+                               EQU              0xE000ED04  ; Interrupt control
+                                                             state register.
+   23 00000000 E000ED22 
+                       NVIC_SYSPRI14
+                               EQU              0xE000ED22  ; PendSV priority r
+                                                            egister (position 1
+                                                            4).
+   24 00000000 E000ED23 
+                       NVIC_SYSPRI15
+                               EQU              0xE000ED23  ; Systick priority 
+                                                            register (position 
+                                                            15).
+   25 00000000 000000EF 
+                       NVIC_LEVEL14
+                               EQU              0xEF        ; Systick priority 
+                                                            value (second lowes
+                                                            t).
+   26 00000000 000000FF 
+                       NVIC_LEVEL15
+                               EQU              0xFF        ; PendSV priority v
+                                                            alue (lowest).
+   27 00000000 10000000 
+                       NVIC_PENDSVSET
+                               EQU              0x10000000  ; Value to trigger 
+                                                            PendSV exception.
+   28 00000000         
+   29 00000000         
+   30 00000000         StartOS
+   31 00000000         ; put your code here
+
+
+
+ARM Macro Assembler    Page 2 
+
+
+   32 00000000         ; Load SP with RunPt.SP
+   33 00000000 4812            LDR              R0, =RunPt  ; R0 <- Pointer to 
+                                                            RunPt
+   34 00000002 6800            LDR              R0, [R0]    ; R0 <- RunPt
+   35 00000004 F8D0 D000       LDR              SP, [R0, #0] ; SP <- RunPt.stac
+                                                            k_pointer
+   36 00000008         
+   37 00000008         ; Restore registers
+   38 00000008 E8BD 0FF0       POP              {R4-R11}
+   39 0000000C BC0F            POP              {R0-R3}
+   40 0000000E F85D CB04       POP              {R12}
+   41 00000012         
+   42 00000012 B001            ADD              SP, SP, #4  ; discard LR
+   43 00000014 F85D EB04       POP              {LR}        ; LR <- PC
+   44 00000018 B001            ADD              SP, SP, #4  ; discard PSR
+   45 0000001A         
+   46 0000001A B662            CPSIE            I           ; enable interrupts
+                                                            
+   47 0000001C         
+   48 0000001C 4770            BX               LR          ; start first threa
+                                                            d
+   49 0000001E         
+   50 0000001E         OSStartHang
+   51 0000001E E7FE            B                OSStartHang ; Should never get 
+                                                            here
+   52 00000020         
+   53 00000020         
+   54 00000020         ;*******************************************************
+                       *************************************************
+   55 00000020         ;                               PERFORM A CONTEXT SWITCH
+                        (From task level)
+   56 00000020         ;                                           void Context
+                       Switch(void)
+   57 00000020         ;
+   58 00000020         ; Note(s) : 1) ContextSwitch() is called when OS wants t
+                       o perform a task context switch.  This function
+   59 00000020         ;              triggers the PendSV exception which is wh
+                       ere the real work is done.
+   60 00000020         ;*******************************************************
+                       *************************************************
+   61 00000020         
+   62 00000020         ContextSwitch
+   63 00000020         ; edit this code
+   64 00000020 480B            LDR              R0, =NVIC_INT_CTRL
+   65 00000022 F04F 5180       LDR              R1, =NVIC_PENDSVSET
+   66 00000026 6001            STR              R1, [R0]
+   67 00000028         
+   68 00000028 4770            BX               LR
+   69 0000002A         
+   70 0000002A         
+   71 0000002A         ;*******************************************************
+                       *************************************************
+   72 0000002A         ;                                         HANDLE PendSV 
+                       EXCEPTION
+   73 0000002A         ;                                     void OS_CPU_PendSV
+                       Handler(void)
+   74 0000002A         ;
+   75 0000002A         ; Note(s) : 1) PendSV is used to cause a context switch.
+                         This is a recommended method for performing
+
+
+
+ARM Macro Assembler    Page 3 
+
+
+   76 0000002A         ;              context switches with Cortex-M.  This is 
+                       because the Cortex-M3 auto-saves half of the
+   77 0000002A         ;              processor context on any exception, and r
+                       estores same on return from exception.  So only
+   78 0000002A         ;              saving of R4-R11 is required and fixing u
+                       p the stack pointers.  Using the PendSV exception
+   79 0000002A         ;              this way means that context saving and re
+                       storing is identical whether it is initiated from
+   80 0000002A         ;              a thread or occurs due to an interrupt or
+                        exception.
+   81 0000002A         ;
+   82 0000002A         ;           2) Pseudo-code is:
+   83 0000002A         ;              a) Get the process SP, if 0 then skip (go
+                       to d) the saving part (first context switch);
+   84 0000002A         ;              b) Save remaining regs r4-r11 on process 
+                       stack;
+   85 0000002A         ;              c) Save the process SP in its TCB, OSTCBC
+                       ur->OSTCBStkPtr = SP;
+   86 0000002A         ;              d) Call OSTaskSwHook();
+   87 0000002A         ;              e) Get current high priority, OSPrioCur =
+                        OSPrioHighRdy;
+   88 0000002A         ;              f) Get current ready thread TCB, OSTCBCur
+                        = OSTCBHighRdy;
+   89 0000002A         ;              g) Get new process SP from TCB, SP = OSTC
+                       BHighRdy->OSTCBStkPtr;
+   90 0000002A         ;              h) Restore R4-R11 from new process stack;
+                       
+   91 0000002A         ;              i) Perform exception return which will re
+                       store remaining context.
+   92 0000002A         ;
+   93 0000002A         ;           3) On entry into PendSV handler:
+   94 0000002A         ;              a) The following have been saved on the p
+                       rocess stack (by processor):
+   95 0000002A         ;                 xPSR, PC, LR, R12, R0-R3
+   96 0000002A         ;              b) Processor mode is switched to Handler 
+                       mode (from Thread mode)
+   97 0000002A         ;              c) Stack is Main stack (switched from Pro
+                       cess stack)
+   98 0000002A         ;              d) OSTCBCur      points to the OS_TCB of 
+                       the task to suspend
+   99 0000002A         ;                 OSTCBHighRdy  points to the OS_TCB of 
+                       the task to resume
+  100 0000002A         ;
+  101 0000002A         ;           4) Since PendSV is set to lowest priority in
+                        the system (by OSStartHighRdy() above), we
+  102 0000002A         ;              know that it will only be run when no oth
+                       er exception or interrupt is active, and
+  103 0000002A         ;              therefore safe to assume that context bei
+                       ng switched out was using the process stack (PSP).
+  104 0000002A         ;*******************************************************
+                       *************************************************
+  105 0000002A         
+  106 0000002A         PendSV_Handler
+  107 0000002A         ; put your code here
+  108 0000002A B672            CPSID            I           ; Start Critical Se
+                                                            ction
+  109 0000002C         
+  110 0000002C E92D 0FF0       PUSH             {R4-R11}    ; b) Save regs on p
+                                                            rocess stack. Core 
+
+
+
+ARM Macro Assembler    Page 4 
+
+
+                                                            has already pushed 
+                                                            other regs to stack
+                                                            
+  111 00000030         
+  112 00000030         ; c) save SP in TCB
+  113 00000030 4806            LDR              R0, =RunPt  ; R0 <- Pointer to 
+                                                            RunPt
+  114 00000032 6802            LDR              R2, [R0]    ; R2 <- RunPt
+  115 00000034 F8C2 D000       STR              SP, [R2, #0] ; RunPt.stack_poin
+                                                            ter <- SP
+  116 00000038         
+  117 00000038         ; f) get current ready thread TCB
+  118 00000038 4906            LDR              R1, =NextRunPt ; R1 <- Pointer 
+                                                            to NextRunPt
+  119 0000003A 6809            LDR              R1, [R1]    ; R1 <- NextRunPt
+  120 0000003C 6001            STR              R1, [R0]    ; RunPt <- NextRunP
+                                                            t
+  121 0000003E         
+  122 0000003E         ; g) get new SP
+  123 0000003E F8D1 D000       LDR              SP, [R1, #0] ; SP <- NextRunPt.
+                                                            stack_pointer
+  124 00000042         
+  125 00000042         ; h) restore registers
+  126 00000042 E8BD 0FF0       POP              {R4-R11}
+  127 00000046         
+  128 00000046 B662            CPSIE            I           ; End Critical Sect
+                                                            ion
+  129 00000048         
+  130 00000048         
+  131 00000048         
+  132 00000048 4770            BX               LR          ; Exception return 
+                                                            will restore remain
+                                                            ing context   
+  133 0000004A         
+  134 0000004A         
+  135 0000004A         ;*******************************************************
+                       *************************************************
+  136 0000004A         ;                                         HANDLE SVC EXC
+                       EPTION
+  137 0000004A         ;                                     void OS_CPU_SVCHan
+                       dler(void)
+  138 0000004A         ;
+  139 0000004A         ; Note(s) : SVC is a software-triggered exception to mak
+                       e OS kernel calls from user land. 
+  140 0000004A         ;           The function ID to call is encoded in the in
+                       struction itself, the location of which can be
+  141 0000004A         ;           found relative to the return address saved o
+                       n the stack on exception entry.
+  142 0000004A         ;           Function-call paramters in R0..R3 are also a
+                       uto-saved on stack on exception entry.
+  143 0000004A         ;*******************************************************
+                       *************************************************
+  144 0000004A         
+  145 0000004A                 IMPORT           OS_Id
+  146 0000004A                 IMPORT           OS_Kill
+  147 0000004A                 IMPORT           OS_Sleep
+  148 0000004A                 IMPORT           OS_Time
+  149 0000004A                 IMPORT           OS_AddThread
+  150 0000004A         
+
+
+
+ARM Macro Assembler    Page 5 
+
+
+  151 0000004A         SVC_Handler
+  152 0000004A         ; put your Lab 5 code here
+  153 0000004A         
+  154 0000004A         
+  155 0000004A 4770            BX               LR          ; Return from excep
+                                                            tion
+  156 0000004C         
+  157 0000004C         
+  158 0000004C         
+  159 0000004C                 ALIGN
+  160 0000004C                 END
+              00000000 
+              E000ED04 
+              00000000 
+Command Line: --debug --xref --diag_suppress=9931 --cpu=Cortex-M4 --apcs=interw
+ork --depend=.\osasm_keil.d -o.\osasm_keil.o -I.\RTE\_Lab5 -IC:\Users\Allen\App
+Data\Local\Arm\Packs\Keil\TM4C_DFP\1.1.0\Device\Include\TM4C123 --predefine="__
+EVAL SETA 1" --predefine="__MICROLIB SETA 1" --predefine="__UVISION_VERSION SET
+A 536" --predefine="_RTE_ SETA 1" --predefine="TM4C123GH6PM SETA 1" --predefine
+="_RTE_ SETA 1" --list=.\osasm_keil.lst ..\RTOS\osasm_keil.s
+
+
+
+ARM Macro Assembler    Page 1 Alphabetic symbol ordering
+Relocatable symbols
+
+.text 00000000
+
+Symbol: .text
+   Definitions
+      At line 8 in file ..\RTOS\osasm_keil.s
+   Uses
+      None
+Comment: .text unused
+ContextSwitch 00000020
+
+Symbol: ContextSwitch
+   Definitions
+      At line 62 in file ..\RTOS\osasm_keil.s
+   Uses
+      At line 17 in file ..\RTOS\osasm_keil.s
+Comment: ContextSwitch used once
+OSStartHang 0000001E
+
+Symbol: OSStartHang
+   Definitions
+      At line 50 in file ..\RTOS\osasm_keil.s
+   Uses
+      At line 51 in file ..\RTOS\osasm_keil.s
+Comment: OSStartHang used once
+PendSV_Handler 0000002A
+
+Symbol: PendSV_Handler
+   Definitions
+      At line 106 in file ..\RTOS\osasm_keil.s
+   Uses
+      At line 18 in file ..\RTOS\osasm_keil.s
+Comment: PendSV_Handler used once
+SVC_Handler 0000004A
+
+Symbol: SVC_Handler
+   Definitions
+      At line 151 in file ..\RTOS\osasm_keil.s
+   Uses
+      At line 19 in file ..\RTOS\osasm_keil.s
+Comment: SVC_Handler used once
+StartOS 00000000
+
+Symbol: StartOS
+   Definitions
+      At line 30 in file ..\RTOS\osasm_keil.s
+   Uses
+      At line 16 in file ..\RTOS\osasm_keil.s
+Comment: StartOS used once
+6 symbols
+
+
+
+ARM Macro Assembler    Page 1 Alphabetic symbol ordering
+Absolute symbols
+
+NVIC_INT_CTRL E000ED04
+
+Symbol: NVIC_INT_CTRL
+   Definitions
+      At line 22 in file ..\RTOS\osasm_keil.s
+   Uses
+      At line 64 in file ..\RTOS\osasm_keil.s
+Comment: NVIC_INT_CTRL used once
+NVIC_LEVEL14 000000EF
+
+Symbol: NVIC_LEVEL14
+   Definitions
+      At line 25 in file ..\RTOS\osasm_keil.s
+   Uses
+      None
+Comment: NVIC_LEVEL14 unused
+NVIC_LEVEL15 000000FF
+
+Symbol: NVIC_LEVEL15
+   Definitions
+      At line 26 in file ..\RTOS\osasm_keil.s
+   Uses
+      None
+Comment: NVIC_LEVEL15 unused
+NVIC_PENDSVSET 10000000
+
+Symbol: NVIC_PENDSVSET
+   Definitions
+      At line 27 in file ..\RTOS\osasm_keil.s
+   Uses
+      At line 65 in file ..\RTOS\osasm_keil.s
+Comment: NVIC_PENDSVSET used once
+NVIC_SYSPRI14 E000ED22
+
+Symbol: NVIC_SYSPRI14
+   Definitions
+      At line 23 in file ..\RTOS\osasm_keil.s
+   Uses
+      None
+Comment: NVIC_SYSPRI14 unused
+NVIC_SYSPRI15 E000ED23
+
+Symbol: NVIC_SYSPRI15
+   Definitions
+      At line 24 in file ..\RTOS\osasm_keil.s
+   Uses
+      None
+Comment: NVIC_SYSPRI15 unused
+6 symbols
+
+
+
+ARM Macro Assembler    Page 1 Alphabetic symbol ordering
+External symbols
+
+NextRunPt 00000000
+
+Symbol: NextRunPt
+   Definitions
+      At line 14 in file ..\RTOS\osasm_keil.s
+   Uses
+      At line 118 in file ..\RTOS\osasm_keil.s
+Comment: NextRunPt used once
+OS_AddThread 00000000
+
+Symbol: OS_AddThread
+   Definitions
+      At line 149 in file ..\RTOS\osasm_keil.s
+   Uses
+      None
+Comment: OS_AddThread unused
+OS_Id 00000000
+
+Symbol: OS_Id
+   Definitions
+      At line 145 in file ..\RTOS\osasm_keil.s
+   Uses
+      None
+Comment: OS_Id unused
+OS_Kill 00000000
+
+Symbol: OS_Kill
+   Definitions
+      At line 146 in file ..\RTOS\osasm_keil.s
+   Uses
+      None
+Comment: OS_Kill unused
+OS_Sleep 00000000
+
+Symbol: OS_Sleep
+   Definitions
+      At line 147 in file ..\RTOS\osasm_keil.s
+   Uses
+      None
+Comment: OS_Sleep unused
+OS_Time 00000000
+
+Symbol: OS_Time
+   Definitions
+      At line 148 in file ..\RTOS\osasm_keil.s
+   Uses
+      None
+Comment: OS_Time unused
+RunPt 00000000
+
+Symbol: RunPt
+   Definitions
+      At line 13 in file ..\RTOS\osasm_keil.s
+   Uses
+      At line 33 in file ..\RTOS\osasm_keil.s
+      At line 113 in file ..\RTOS\osasm_keil.s
+
+7 symbols
+356 symbols in table

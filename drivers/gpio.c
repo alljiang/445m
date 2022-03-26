@@ -4,7 +4,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "bit-utils.h"
+#include "utils/bit-utils.h"
 #include "vware/tm4c123gh6pm.h"
 #include "RTOS/OS.h"
 #include "interrupt.h"
@@ -41,7 +41,7 @@ void
 GPIO_Initialize(void) {
     volatile unsigned long delay;
 
-    SYSCTL_RCGCGPIO_R |= 0b111111;      // activate clock for ports A-F
+    SYSCTL_RCGCGPIO_R |= 0x3F;      // activate clock for ports A-F
     delay = SYSCTL_RCGCGPIO_R;
 
     GPIO_PORTF_LOCK_R = 0x4C4F434B;     // unlock GPIO Port F

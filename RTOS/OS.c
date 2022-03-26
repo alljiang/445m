@@ -19,11 +19,11 @@
 #include "vware/LaunchPad.h"
 #include "vware/ADCT0ATrigger.h"
 #include "vware/InterruptFunctions.h"
-#include "bit-utils.h"
-#include "gpio.h"
-#include "interrupt.h"
-#include "launchpad.h"
-#include "timers.h"
+#include "utils/bit-utils.h"
+#include "drivers/gpio.h"
+#include "drivers/interrupt.h"
+#include "drivers/launchpad.h"
+#include "drivers/timers.h"
 
 //#define ROUND_ROBIN_SCHEDULING
 
@@ -1027,7 +1027,7 @@ exit:
 
 //************** I/O Redirection *************** 
 // redirect terminal I/O to UART or file (Lab 4)
-
+/*
 int StreamToDevice = 0;                // 0=UART, 1=stream to file (Lab 4)
 
 int
@@ -1078,4 +1078,4 @@ OS_RedirectToST7735(void) {
 
     return 1;
 }
-
+*/

@@ -1,0 +1,10 @@
+.\efile.o: eFile.c
+.\efile.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stdint.h
+.\efile.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\string.h
+.\efile.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stdio.h
+.\efile.o: ..\RTOS/OS.h
+.\efile.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stdbool.h
+.\efile.o: ..\RTOS/eFile.h
+.\efile.o: ff.h
+.\efile.o: integer.h
+.\efile.o: ffconf.h

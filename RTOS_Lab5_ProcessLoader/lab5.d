@@ -1,0 +1,17 @@
+.\lab5.o: Lab5.c
+.\lab5.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stdint.h
+.\lab5.o: ..\vware/tm4c123gh6pm.h
+.\lab5.o: ..\vware/CortexM.h
+.\lab5.o: ..\vware/LaunchPad.h
+.\lab5.o: ..\vware/PLL.h
+.\lab5.o: ..\vware/LPF.h
+.\lab5.o: ..\RTOS/UART0int.h
+.\lab5.o: ..\RTOS/ADC.h
+.\lab5.o: ..\vware/ADCT0ATrigger.h
+.\lab5.o: ..\vware/IRDistance.h
+.\lab5.o: ..\RTOS/OS.h
+.\lab5.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\stdbool.h
+.\lab5.o: ..\RTOS/Interpreter.h
+.\lab5.o: ..\RTOS/ST7735.h
+.\lab5.o: ..\drivers/gpio.h
+.\lab5.o: ..\drivers/launchpad.h

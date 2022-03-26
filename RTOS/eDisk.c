@@ -527,8 +527,7 @@ DRESULT eDisk_Read(BYTE drv, BYTE *buff, DWORD sector, UINT count){
       } while (--count);
       send_cmd(CMD12, 0);        /* STOP_TRANSMISSION */
     }
-  }
-  deselect();
+  }  deselect();
 
   return count ? RES_ERROR : RES_OK;  /* Return result */
 }
