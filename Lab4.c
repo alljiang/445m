@@ -305,20 +305,20 @@ realmain(void) {        // lab 4 real main
     IdleCount = 0;
 
     // initialize communication channels
-    OS_Fifo_Init(64);
-    OS_InitSemaphore(&doFFT, 0);
-    ADC0_InitTimer0ATriggerSeq0(0, 50, &Producer); // start ADC sampling, channel 0, PE3, 50 Hz
-    ADC_Init(3);  // sequencer 3, channel 3, PE0, sampling in DAS()
-    OS_AddPeriodicThread(&DAS, 10 * TIME_1MS, 1); // 100Hz real time sampling of PE0
+//    OS_Fifo_Init(64);
+//    OS_InitSemaphore(&doFFT, 0);
+//    ADC0_InitTimer0ATriggerSeq0(0, 50, &Producer); // start ADC sampling, channel 0, PE3, 50 Hz
+//    ADC_Init(3);  // sequencer 3, channel 3, PE0, sampling in DAS()
+//    OS_AddPeriodicThread(&DAS, 10 * TIME_1MS, 1); // 100Hz real time sampling of PE0
 
     // attach background tasks
-    OS_AddPeriodicThread(&disk_timerproc, TIME_1MS, 5); // time-out routines for disk
-    OS_AddSW1Task(&SW1Push, 2);    // PF4, SW1
-    OS_AddSW2Task(&SW2Push, 3);    // PF0, SW2
+//    OS_AddPeriodicThread(&disk_timerproc, TIME_1MS, 5); // time-out routines for disk
+//    OS_AddSW1Task(&SW1Push, 2);    // PF4, SW1
+//    OS_AddSW2Task(&SW2Push, 3);    // PF0, SW2
 
     // create initial foreground threads
     NumCreated = 0;
-    NumCreated += OS_AddThread(&Init, 128, 0);  // init process, run first
+//    NumCreated += OS_AddThread(&Init, 128, 0);  // init process, run first
     NumCreated += OS_AddThread(&Interpreter, 128, 4);
     NumCreated += OS_AddThread(&Idle, 128, 5); // runs when nothing useful to do
 

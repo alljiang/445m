@@ -62,7 +62,7 @@ uint32_t const JitterSize = JITTERSIZE;
 uint32_t JitterHistogram[JITTERSIZE] = { 0, };
 uint32_t period1 = TIME_1MS;
 
-int32_t MaxJitter2;             // largest time jitter between interrupts in usec
+int32_t MaxJitter2;            // largest time jitter between interrupts in usec
 #define JITTERSIZE2 64
 uint32_t const JitterSize2 = JITTERSIZE2;
 uint32_t JitterHistogram2[JITTERSIZE2] = { 0, };
@@ -167,15 +167,21 @@ unlinkTCB(TCBPtr tcb) {
  */
 static inline TCBPtr
 getPriorityTail(TCBPtr tcb, int priority) {
-    TCBPtr head = tcb;
+    TCBPtr start = tcb;
+    TCBPtr rv = NULL;
 
-    // return tcb directly if list size is only 1
-    while (tcb->TCB_next != head) {
-        if (tcb->priority <= priority) {
-            tcb = tcb->TCB_next;
-        } else break;
+    while (tcb->priority <= priority) {
+        tcb = tcb->TCB_next;
+
+        if (tcb == start) {
+            rv = NULL;
+            break;
+        } else {
+            rv = tcb;
+        }
     }
-    return tcb;
+
+    return rv;
 }
 #endif
 
@@ -394,13 +400,18 @@ OS_AddThread(void
 #ifdef PRIORITY_SCHEDULING
         TCBPtr tail = getPriorityTail(RunPt, tcbPtr->priority);
 
-        // Insert tcbPtr into chain in front of priority tail
-        linkTCBs(tail->TCB_previous, tcbPtr, tail);
+        if (tail == NULL) {
+            // Insert tcbPtr in front of RunPt
+            linkTCBs(RunPt->TCB_previous, tcbPtr, RunPt);
+        } else {
+            // Insert tcbPtr into chain in front of priority tail
+            linkTCBs(tail->TCB_previous, tcbPtr, tail);
 
-        // If RunPt is the tail, then change RunPt to point to the added TCB
-        // since RunPt should point to to highest priority TCB
-        if (tail == RunPt && !OS_Started) {
-            RunPt = tail->TCB_previous;
+            // If RunPt is the tail, then change RunPt to point to the added TCB
+            // since RunPt should point to the highest priority TCB
+            if (tail == RunPt && !OS_Started) {
+                RunPt = tail->TCB_previous;
+            }
         }
 #endif
     }
@@ -459,7 +470,7 @@ OS_CallBackgroundTask(uint8_t taskID) {
     unsigned static long LastTime, LastTime2;
     uint32_t thisTime, diff;
 
-    if(!OS_Started) return;
+    if (!OS_Started) return;
 
     if (taskID == 0) {
         // Switch 1 Task
@@ -916,7 +927,8 @@ exit:
 void
 OS_Scheduler() {
 #ifdef PRIORITY_SCHEDULING
-    TCBPtr priorityHead, runCandidatePriority, runCandidateRoundRobin, search, start;
+    TCBPtr priorityHead, runCandidatePriority, runCandidateRoundRobin, search,
+            start;
     int earliestServiceTime = 2147483647;
 #endif
 
@@ -971,28 +983,27 @@ OS_Scheduler() {
     }
 
     if (runCandidateRoundRobin->priority <= runCandidatePriority->priority) {
-            // bounded waiting - for all unblocked TCBs of the same priority,
-            // choose the one that hasn't been serviced for longest
-            search = runCandidateRoundRobin->TCB_next;
-            earliestServiceTime = runCandidateRoundRobin->last_serviced;
-            start = runCandidateRoundRobin;
+        // bounded waiting - for all unblocked TCBs of the same priority,
+        // choose the one that hasn't been serviced for longest
+        search = runCandidateRoundRobin->TCB_next;
+        earliestServiceTime = runCandidateRoundRobin->last_serviced;
+        start = runCandidateRoundRobin;
 
-            while (search != start) {
-                if (search->priority != start->priority
-                        || search->blocked_state != 0
-                        || search->sleep_state > 0) {
-                    search = search->TCB_next;
-                    continue;
-                }
-
-                if (search->last_serviced < earliestServiceTime) {
-                    runCandidateRoundRobin = search;
-                    earliestServiceTime = search->last_serviced;
-                }
+        while (search != start) {
+            if (search->priority != start->priority
+                    || search->blocked_state != 0 || search->sleep_state > 0) {
                 search = search->TCB_next;
+                continue;
             }
 
-            NextRunPt = runCandidateRoundRobin;
+            if (search->last_serviced < earliestServiceTime) {
+                runCandidateRoundRobin = search;
+                earliestServiceTime = search->last_serviced;
+            }
+            search = search->TCB_next;
+        }
+
+        NextRunPt = runCandidateRoundRobin;
     } else {
         NextRunPt = runCandidatePriority;
     }
