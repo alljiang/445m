@@ -500,6 +500,18 @@ exit:
     return rv;
 }
 
+int
+eFile_WriteString(const char *data) {
+    int rv = 0;
+    int i = 0;
+    while (data[i] != 0) {
+        rv = eFile_Write(data[i++]);
+        if (rv != 0) goto exit;
+    }
+exit:
+    return rv;
+}
+
 //---------- eFile_WClose-----------------
 // close the file, left disk in a state power can be removed
 // Input: none

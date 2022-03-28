@@ -68,7 +68,8 @@ eFile_WOpen(const char name[]);      // open a file for writing
  */
 int
 eFile_Write(const char data);
-
+int
+eFile_WriteString(const char data[]);
 /**
  * @details Close the file, leave disk in a state power can be removed.
  * This function will flush all RAM buffers to the disk.

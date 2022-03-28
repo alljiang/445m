@@ -97,6 +97,7 @@
 #include "RTOS/eDisk.h"
 #include "RTOS/eFile.h"
 #include "RTOS/ADC.h"
+#include "utils/str-utils.h"
 
 #include "gpio.h"
 #include "launchpad.h"
@@ -179,6 +180,14 @@ DSP(void) {
     }
 }
 
+char itoabuf[10];
+void
+writeNum(int value) {
+    memset(itoabuf, 0, 10);
+    itoa(value, itoabuf);
+    eFile_WriteString((const char*) itoabuf);
+}
+
 //******** Robot *************** 
 // foreground thread, accepts data from producer
 // inputs:  none
@@ -195,26 +204,39 @@ Robot(void) {
     OS_ClearMsTime();
     OS_Fifo_Init(256);
 
-    printf("Robot running...");
+    UART_OutString("Robot running...");
     if (OS_RedirectToFile(FileName)) { // robot0, robot1,...,robot7
-        printf(" Error redirecting to file.\n\r");
+//        printf(" Error redirecting to file.\n\r");
         Running = 0;
         OS_Kill();
         return;
     }
-    printf("time(s)\tdata(V)\tdistance(mm)\n\r");
+//    printf("time(s)\tdata(V)\tdistance(mm)\n\r");
+    eFile_WriteString("time(s)\tdata(V)\tdistance(mm)\n\r");
     do {
         PIDWork++;    // performance measurement
-        time = OS_MsTime();          // 10ms resolution in this OS
+        time = OS_MsTime()/10;          // 10ms resolution in this OS
         data = OS_Fifo_Get();        // 1000 Hz sampling get from producer
         voltage = (300 * data) / 1024;   // in mV
         distance = IRDistance_Convert(data, 1);
-        printf("%0u.%02u\t%0u.%03u \t%5u\n\r", time / 100, time % 100,
-                voltage / 1000, voltage % 1000, distance);
-    } while (time < 200);       // change this to mean 2 seconds
+//        printf("%0u.%02u\t%0u.%03u \t%5u\n\r", time / 100, time % 100,
+//                voltage / 1000, voltage % 1000, distance);
+        writeNum(time / 100);
+        eFile_WriteString(".");
+        writeNum(time % 100);
+        eFile_WriteString("\t");
+        writeNum(voltage / 1000);
+        eFile_WriteString(".");
+        writeNum(voltage % 1000);
+        eFile_WriteString(" \t");
+        writeNum(distance);
+        eFile_WriteString("\n\r");
+
+    } while (time < 2000);       // change this to mean 2 seconds
     OS_EndRedirectToFile();
     ST7735_Message(0, 1, "IR0 (mm) =", distance);
-    printf("done.\n\r");
+//    printf("done.\n\r");
+    UART_OutString("done.\n\r");
     FileName[5] = (FileName[5] + 1) & 0xF7; // 0 to 7
     Running = 0;             // robot no longer running
     OS_Kill();
@@ -268,12 +290,12 @@ Init(void) {
     // initialize file system
     // needs to execute after periodic interrupts have started
     if (eFile_Init()) {
-        printf("Error initializing file system.\n\r");
+//        printf("Error initializing file system.\n\r");
     }
 
     // mount the file system
     if (eFile_Mount()) {
-        printf("Error mounting file system.\n\r");
+//        printf("Error mounting file system.\n\r");
     }
 
     // launch user-level tasks
@@ -305,20 +327,20 @@ realmain(void) {        // lab 4 real main
     IdleCount = 0;
 
     // initialize communication channels
-//    OS_Fifo_Init(64);
-//    OS_InitSemaphore(&doFFT, 0);
-//    ADC0_InitTimer0ATriggerSeq0(0, 50, &Producer); // start ADC sampling, channel 0, PE3, 50 Hz
-//    ADC_Init(3);  // sequencer 3, channel 3, PE0, sampling in DAS()
-//    OS_AddPeriodicThread(&DAS, 10 * TIME_1MS, 1); // 100Hz real time sampling of PE0
+    OS_Fifo_Init(64);
+    OS_InitSemaphore(&doFFT, 0);
+    ADC0_InitTimer0ATriggerSeq0(0, 50, &Producer); // start ADC sampling, channel 0, PE3, 50 Hz
+    ADC_Init(3);  // sequencer 3, channel 3, PE0, sampling in DAS()
+    OS_AddPeriodicThread(&DAS, 10 * TIME_1MS, 1); // 100Hz real time sampling of PE0
 
     // attach background tasks
-//    OS_AddPeriodicThread(&disk_timerproc, TIME_1MS, 5); // time-out routines for disk
-//    OS_AddSW1Task(&SW1Push, 2);    // PF4, SW1
-//    OS_AddSW2Task(&SW2Push, 3);    // PF0, SW2
+    OS_AddPeriodicThread(&disk_timerproc, TIME_1MS, 5); // time-out routines for disk
+    OS_AddSW1Task(&SW1Push, 2);    // PF4, SW1
+    OS_AddSW2Task(&SW2Push, 3);    // PF0, SW2
 
     // create initial foreground threads
     NumCreated = 0;
-//    NumCreated += OS_AddThread(&Init, 128, 0);  // init process, run first
+    NumCreated += OS_AddThread(&Init, 128, 0);  // init process, run first
     NumCreated += OS_AddThread(&Interpreter, 128, 4);
     NumCreated += OS_AddThread(&Idle, 128, 5); // runs when nothing useful to do
 
@@ -486,41 +508,41 @@ char const string4[] = "Number of Bytes = %lu";
 void
 TestDirectory(void) {
     /*
-    char *name;
-    unsigned long size;
-    unsigned int num;
-    unsigned long total;
-    num = 0;
-    total = 0;
-//    printf("\n\r");
-    UART_OutString("\n\r");
-    if (eFile_DOpen("")) diskError("eFile_DOpen", 0);
-    while (!eFile_DirNext(&name, &size)) {
-//        printf(string1, name);
-//        printf("  ");
-//        printf(string2, size);
-//        printf("\n\r");
-        UART_OutString((char*) string1);
-        UART_OutString(name);
-        UART_OutString("  ");
-        UART_OutString((char*) string2);
-        UART_OutUDec(size);
-        UART_OutString("\n\r");
-        total = total + size;
-        num++;
-    }
-//    printf(string3, num);
-//    printf("\n\r");
-//    printf(string4, total);
-//    printf("\n\r");
-    UART_OutString((char*) string3);
-    UART_OutUDec(num);
-    UART_OutString("\n\r");
-    UART_OutString((char*) string4);
-    UART_OutUDec(total);
-    UART_OutString("\n\r");
-    if (eFile_DClose()) diskError("eFile_DClose", 0);
-    */
+     char *name;
+     unsigned long size;
+     unsigned int num;
+     unsigned long total;
+     num = 0;
+     total = 0;
+     //    printf("\n\r");
+     UART_OutString("\n\r");
+     if (eFile_DOpen("")) diskError("eFile_DOpen", 0);
+     while (!eFile_DirNext(&name, &size)) {
+     //        printf(string1, name);
+     //        printf("  ");
+     //        printf(string2, size);
+     //        printf("\n\r");
+     UART_OutString((char*) string1);
+     UART_OutString(name);
+     UART_OutString("  ");
+     UART_OutString((char*) string2);
+     UART_OutUDec(size);
+     UART_OutString("\n\r");
+     total = total + size;
+     num++;
+     }
+     //    printf(string3, num);
+     //    printf("\n\r");
+     //    printf(string4, total);
+     //    printf("\n\r");
+     UART_OutString((char*) string3);
+     UART_OutUDec(num);
+     UART_OutString("\n\r");
+     UART_OutString((char*) string4);
+     UART_OutUDec(total);
+     UART_OutString("\n\r");
+     if (eFile_DClose()) diskError("eFile_DClose", 0);
+     */
 }
 void
 TestFile(void) {
@@ -718,27 +740,27 @@ TestDiskFunctionality(void) {
     rv = rv == 0 ? 1 : 0;
     if (rv == 1) goto exit;
 
-     rv = eFile_ROpen("asdf");
-     for (int i = 0; i < 601; i++) {
-         rv = eFile_ReadNext(&c);
-         if (rv == 1 && i != 600) goto exit;
-         if (i == 600 && rv != 1) goto exit;
-         if (rv == 0 && c != 'a') {
-             rv = 1;
-             goto exit;
-         }
-     }
+    rv = eFile_ROpen("asdf");
+    for (int i = 0; i < 601; i++) {
+        rv = eFile_ReadNext(&c);
+        if (rv == 1 && i != 600) goto exit;
+        if (i == 600 && rv != 1) goto exit;
+        if (rv == 0 && c != 'a') {
+            rv = 1;
+            goto exit;
+        }
+    }
 
-     rv = eFile_RClose();
-     if (rv == 1) goto exit;
+    rv = eFile_RClose();
+    if (rv == 1) goto exit;
 
-     // delete a file that doesn't exist
-     rv = eFile_Delete("asdfg");
-     rv = rv == 0 ? 1 : 0;
-     if (rv == 1) goto exit;
+    // delete a file that doesn't exist
+    rv = eFile_Delete("asdfg");
+    rv = rv == 0 ? 1 : 0;
+    if (rv == 1) goto exit;
 
-     rv = eFile_Delete("asdf");
-     if (rv == 1) goto exit;
+    rv = eFile_Delete("asdf");
+    if (rv == 1) goto exit;
 
 exit:
     if (rv == 1) {
@@ -803,8 +825,6 @@ Testmain_functionality(void) {
     OS_Launch(10 * TIME_1MS); // doesn't return, interrupts enabled in here
     return 0;               // this never executes
 }
-
-
 
 //*******************Trampoline for selecting main to execute**********
 int
