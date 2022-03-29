@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+        "*.x": "linkerscript",
+        "stdint.h": "c"
+    }
+}

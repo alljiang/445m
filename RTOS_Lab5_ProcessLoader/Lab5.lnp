@@ -15,8 +15,6 @@
 ".\adct0atrigger.o"
 ".\irdistance.o"
 ".\lpf.o"
-".\cr4_fft_64_stm32.o"
-".\pid_stm32.o"
 ".\edisk.o"
 ".\efile.o"
 ".\ff.o"

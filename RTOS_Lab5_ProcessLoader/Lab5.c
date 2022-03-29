@@ -1,36 +1,32 @@
-// Lab3.c
+// Lab5.c
 // Runs on LM4F120/TM4C123
-// Real Time Operating System for Labs 2 and 3
-// Lab2 Part 1: Testmain1 and Testmain2
-// Lab2 Part 2: Testmain3, Testmain4, Testmain5, TestmainCS and realmain
-// Lab3: Testmain6, Testmain7, TestmainCS and realmain (with SW2)
+// Real Time Operating System for Lab 5
 
-// Jonathan W. Valvano 1/29/20, valvano@mail.utexas.edu
-// EE445M/EE380L.12
+// Jonathan W. Valvano 3/29/17, valvano@mail.utexas.edu
+// Andreas Gerstlauer 3/1/16, gerstl@ece.utexas.edu
+// EE445M/EE380L.6 
 // You may use, edit, run or distribute this file 
 // You are free to change the syntax/organization of this file
 
 // LED outputs to logic analyzer for use by OS profile 
 // PF1 is preemptive thread switch
-// PF2 is first periodic task (DAS samples PE3)
-// PF3 is second periodic task (PID)
+// PF2 is first periodic background task (if any)
+// PF3 is second periodic background task (if any)
 // PC4 is PF4 button touch (SW1 task)
 
-// IR distance sensors
-// J5/A3/PE3 analog channel 0  <- connect an IR distance sensor to J5 to get a realistic analog signal on PE3
-// J6/A2/PE2 analog channel 1  <- connect an IR distance sensor to J6 to get a realistic analog signal on PE2
-// J7/A1/PE1 analog channel 2
-// J8/A0/PE0 analog channel 3  
+// Outputs for task profiling
+// PD0 is idle task
+// PD1 is button task
 
 // Button inputs
-// PF0 is SW2 task (Lab3)
+// PF0 is SW2 task
 // PF4 is SW1 button input
 
 // Analog inputs
-// PE3 Ain0 sampled at 2kHz, sequencer 3, by DAS, using software start in ISR
-// PE2 Ain1 sampled at 250Hz, sequencer 0, by Producer, timer tigger
+// PE3 Ain0 sampled at 2kHz, sequencer 3, by Interpreter, using software start
 
 #include <stdint.h>
+#include <stdio.h> 
 #include "vware/tm4c123gh6pm.h"
 #include "vware/CortexM.h"
 #include "vware/LaunchPad.h"
@@ -38,347 +34,233 @@
 #include "vware/LPF.h"
 #include "RTOS/UART0int.h"
 #include "RTOS/ADC.h"
-#include "vware/ADCT0ATrigger.h"
-#include "vware/IRDistance.h"
 #include "RTOS/OS.h"
+#include "RTOS/heap.h"
 #include "RTOS/Interpreter.h"
 #include "RTOS/ST7735.h"
-
+#include "RTOS/eDisk.h"
+#include "RTOS/eFile.h"
+#include "utils/uart-utils.h"
 #include "drivers/gpio.h"
 #include "drivers/launchpad.h"
 
-//*********Prototype for FFT in cr4_fft_64_stm32.s, STMicroelectronics
-void
-cr4_fft_64_stm32(void *pssOUT, void *pssIN, unsigned short Nbin);
-//*********Prototype for PID in PID_stm32.s, STMicroelectronics
-short
-PID_stm32(short Error, short *Coeff);
 
 uint32_t NumCreated;   // number of foreground threads created
 uint32_t IdleCount;    // CPU idle counter
-uint32_t PIDWork;      // current number of PID calculations finished
-uint32_t FilterWork;   // number of digital filter calculations finished
-uint32_t NumSamples;   // incremented every ADC sample, in Producer
-#define FS 400              // producer/consumer sampling
-#define RUNLENGTH (20*FS)   // display results and quit when NumSamples==RUNLENGTH
-// 20-sec finite time experiment duration 
-
-#define PERIOD1 TIME_500US   // DAS 2kHz sampling period in system time units
-#define PERIOD2 TIME_1MS     // PID period in system time units
-int32_t x[64], y[64];           // input and output arrays for FFT
-
-// Idle reference count for 10ms of completely idle CPU
-// This should really be calibrated in a 10ms delay loop in OS_Init()
-uint32_t IdleCountRef = 30769;
-uint32_t CPUUtil;       // calculated CPU utilization (in 0.01%)
 
 //---------------------User debugging-----------------------
-uint32_t DataLost;     // data sent by Producer, but not received by Consumer
-extern int32_t MaxJitter, MaxJitter2;      // largest time jitter between interrupts in usec
-extern uint32_t const JitterSize, JitterSize2;
-extern uint32_t JitterHistogram[], JitterHistogram2[];
+extern int32_t MaxJitter;             // largest time jitter between interrupts in usec
 
 #define PD0  (*((volatile uint32_t *)0x40007004))
 #define PD1  (*((volatile uint32_t *)0x40007008))
 #define PD2  (*((volatile uint32_t *)0x40007010))
 #define PD3  (*((volatile uint32_t *)0x40007020))
 
-void
-PortD_Init(void) {
-    SYSCTL_RCGCGPIO_R |= 0x08;       // activate port D
-    while ((SYSCTL_RCGCGPIO_R & 0x08) == 0) {
-    };
-    GPIO_PORTD_DIR_R |= 0x0F;        // make PD3-0 output heartbeats
-    GPIO_PORTD_AFSEL_R &= ~0x0F;     // disable alt funct on PD3-0
-    GPIO_PORTD_DEN_R |= 0x0F;        // enable digital I/O on PD3-0
-    GPIO_PORTD_PCTL_R = ~0x0000FFFF;
-    GPIO_PORTD_AMSEL_R &= ~0x0F;
-    ;    // disable analog functionality on PD
+void PortD_Init(void){ 
+  SYSCTL_RCGCGPIO_R |= 0x08;       // activate port D
+  while((SYSCTL_RCGCGPIO_R&0x08)==0){};      
+  GPIO_PORTD_DIR_R |= 0x0F;        // make PD3-0 output heartbeats
+  GPIO_PORTD_AFSEL_R &= ~0x0F;     // disable alt funct on PD3-0
+  GPIO_PORTD_DEN_R |= 0x0F;        // enable digital I/O on PD3-0
+  GPIO_PORTD_PCTL_R = ~0x0000FFFF;
+  GPIO_PORTD_AMSEL_R &= ~0x0F;;    // disable analog functionality on PD
 }
+
 
 //------------------Task 1--------------------------------
-// 2 kHz sampling ADC channel 0, using software start trigger
-// background thread executed at 2 kHz
-// 60-Hz notch high-Q, IIR filter, assuming fs=2000 Hz
-// y(n) = (256x(n) -503x(n-1) + 256x(n-2) + 498y(n-1)-251y(n-2))/256 (2k sampling)
-
-//******** DAS *************** 
-// background thread, calculates 60Hz notch filter
-// runs 2000 times/sec
-// samples analog channel 0, PE3,
-// inputs:  none
-// outputs: none
-uint32_t DASoutput;
-void
-DAS(void) {
-    uint32_t input;
-    if (NumSamples < RUNLENGTH) {   // finite time run
-        PD0 ^= 0x01;
-        input = ADC_In();           // channel set when calling ADC_Init
-        PD0 ^= 0x01;
-        DASoutput = Filter(input);
-        FilterWork++;        // calculation finished
-        PD0 ^= 0x01;
-    }
-}
-
-//--------------end of Task 1-----------------------------
-
-//------------------Task 2--------------------------------
 // background thread executes with SW1 button
 // one foreground task created with button push
-// foreground treads run for 2 sec and die
 
 // ***********ButtonWork*************
-void
-ButtonWork(void) {
-    uint32_t myId = OS_Id();
-    PD1 ^= 0x02;
-    ST7735_Message(1, 0, "NumCreated   =", NumCreated);
-    PD1 ^= 0x02;
-    OS_Sleep(50);     // set this to sleep for 50msec
-    ST7735_Message(1, 1, "CPUUtil 0.01%=", CPUUtil);
-    ST7735_Message(1, 2, "DataLost     =", DataLost);
-    ST7735_Message(1, 3, "Jitter 0.1us =", MaxJitter);
-    ST7735_Message(1, 4, "CPUUtil 0.01%=", CPUUtil);
-    PD1 ^= 0x02;
-    OS_Kill();  // done, OS does not return from a Kill
-}
+void ButtonWork(void){  heap_stats_t heap;
+  uint32_t myId = OS_Id(); 
+  PD1 ^= 0x02;
+  if(Heap_Stats(&heap)) OS_Kill();
+  PD1 ^= 0x02;
+  ST7735_Message(1,0,"Heap size  =",heap.size); 
+  ST7735_Message(1,1,"Heap used  =",heap.used);  
+  ST7735_Message(1,2,"Heap free  =",heap.free);
+  ST7735_Message(1,3,"Heap waste =",heap.size - heap.used - heap.free);
+  PD1 ^= 0x02;
+  OS_Kill();  // done, OS does not return from a Kill
+} 
 
 //************SW1Push*************
 // Called when SW1 Button pushed
 // Adds another foreground task
 // background threads execute once and return
-void
-SW1Push(void) {
-    if (OS_MsTime() > 20) { // debounce
-        if (OS_AddThread(&ButtonWork, 128, 2)) {
-            NumCreated++;
-        }
-        OS_ClearMsTime();  // at least 20ms between touches
+void SW1Push(void){
+  if(OS_MsTime() > 20){ // debounce
+    if(OS_AddThread(&ButtonWork,100,2)){
+      NumCreated++; 
     }
+    OS_ClearMsTime();  // at least 20ms between touches
+  }
 }
 
 //************SW2Push*************
-// Called when SW2 Button pushed, Lab 3 only
+// Called when SW2 Button pushed
 // Adds another foreground task
 // background threads execute once and return
-void
-SW2Push(void) {
-    if (OS_MsTime() > 20) { // debounce
-        if (OS_AddThread(&ButtonWork, 128, 2)) {
-            NumCreated++;
-        }
-        OS_ClearMsTime();  // at least 20ms between touches
+void SW2Push(void){
+  if(OS_MsTime() > 20){ // debounce
+    if(OS_AddThread(&ButtonWork,100,2)){
+      NumCreated++; 
     }
+    OS_ClearMsTime();  // at least 20ms between touches
+  }
 }
 
-//--------------end of Task 2-----------------------------
+//--------------end of Task 1-----------------------------
 
-//------------------Task 3--------------------------------
-// hardware timer-triggered ADC sampling at 400Hz
-// Producer runs as part of ADC ISR
-// Producer uses fifo to transmit 400 samples/sec to Consumer
-// every 64 samples, Consumer calculates FFT
-// every 2.5ms*64 = 160 ms (6.25 Hz), consumer sends data to Display via mailbox
-// Display thread updates LCD with measurement
-
-//******** Producer *************** 
-// The Producer in this lab will be called from an ADC ISR
-// A timer runs at 400Hz, started through the provided ADCT0ATrigger.c driver
-// The timer triggers the ADC, creating the 400Hz sampling
-// The ADC ISR runs when ADC data is ready
-// The ADC ISR calls this function with a 12-bit sample 
-// sends data to the consumer, runs periodically at 400Hz
-// inputs:  none
-// outputs: none
-void
-Producer(uint32_t data) {
-    if (NumSamples < RUNLENGTH) {   // finite time run
-        NumSamples++;               // number of samples
-        if (OS_Fifo_Put(data) == 0) { // send to consumer
-            DataLost++;
-        }
-    }
-}
-
-//******** Consumer *************** 
-// foreground thread, accepts data from producer
-// calculates FFT, sends DC component to Display
-// inputs:  none
-// outputs: none
-void
-Display(void);
-void
-Consumer(void) {
-    uint32_t data, DCcomponent;   // 12-bit raw ADC sample, 0 to 4095
-    uint32_t t;                  // time in 2.5 ms
-    ADC0_InitTimer0ATriggerSeq0(1, FS, &Producer); // start ADC sampling, channel 1, PE2, 400 Hz
-    NumCreated += OS_AddThread(&Display, 128, 0);
-    while (NumSamples < RUNLENGTH) {
-        PD2 = 0x04;
-        for (t = 0; t < 64; t++) {   // collect 64 ADC samples
-            data = OS_Fifo_Get();    // get from producer
-            x[t] = data;          // real part is 0 to 4095, imaginary part is 0
-        }
-        PD2 = 0x00;
-        cr4_fft_64_stm32(y, x, 64);  // complex FFT of last 64 ADC values
-        DCcomponent = y[0] & 0xFFFF; // Real part at frequency 0, imaginary part should be zero
-        OS_MailBox_Send(DCcomponent); // called every 2.5ms*64 = 160ms
-    }
-    OS_Kill();  // done
-}
-
-//******** Display *************** 
-// foreground thread, accepts data from consumer
-// displays calculated results on the LCD
-// inputs:  none                            
-// outputs: none
-void
-Display(void) {
-    uint32_t data, voltage, distance;
-    uint32_t myId = OS_Id();
-    ST7735_Message(0, 1, "Run length = ", (RUNLENGTH) / FS); // top half used for Display
-    while (NumSamples < RUNLENGTH) {
-        data = OS_MailBox_Recv();
-        voltage = 3000 * data / 4095; // calibrate your device so voltage is in mV
-        distance = IRDistance_Convert(data, 1); // you will calibrate this in Lab 6
-        PD3 = 0x08;
-        ST7735_Message(0, 2, "v(mV) =", voltage);
-        ST7735_Message(0, 3, "d(mm) =", distance);
-        PD3 = 0x00;
-    }
-    ST7735_Message(0, 4, "Num samples =", NumSamples);
-    OS_Kill();  // done
-}
-
-//--------------end of Task 3-----------------------------
-
-//------------------Task 4--------------------------------
-// background thread that executes a digital controller 
-
-//******** PID *************** 
-// background thread, runs a PID controller
-// runs every 1ms
-// inputs:  none
-// outputs: none
-short IntTerm;     // accumulated error, RPM-sec
-short PrevError;   // previous error, RPM
-short Coeff[3] = { // PID coefficients
-        384,  // 1.5 = 384/256 proportional coefficient
-                128,  // 0.5 = 128/256 integral coefficient
-                64    // 0.25 = 64/256 derivative coefficient*
-        };
-short Actuator;
-void
-PID(void) {
-    static short err = -1000;  // speed error, range -100 to 100 RPM
-    Actuator = PID_stm32(err, Coeff) / 256;
-    err++;
-    if (err > 1000) err = -1000; // made-up data
-    PIDWork++;
-}
-
-//--------------end of Task 4-----------------------------
-
-//------------------Task 5--------------------------------
-// UART background ISR performs serial input/output
-// Two software fifos are used to pass I/O data to foreground
-// The interpreter runs as a foreground thread
-// The UART driver should call OS_Wait(&RxDataAvailable) when foreground tries to receive
-// The UART ISR should call OS_Signal(&RxDataAvailable) when it receives data from Rx
-// Similarly, the transmit channel waits on a semaphore in the foreground
-// and the UART ISR signals this semaphore (TxRoomLeft) when getting data from fifo
-
-//******** Interpreter *************** 
-// Modify your intepreter from Lab 1, adding commands to help debug 
-// Interpreter is a foreground thread, accepts input from serial port, outputs to serial port
-// inputs:  none
-// outputs: none
-void
-Interpreter(void);    // just a prototype, link to your interpreter
-// add the following commands, leave other commands, if they make sense
-// 1) print performance measures 
-//    time-jitter, number of data points lost, number of calculations performed
-//    i.e., NumSamples, NumCreated, MaxJitter, DataLost, FilterWork, PIDwork
-
-// 2) print debugging parameters 
-//    i.e., x[], y[] 
-
-//--------------end of Task 5-----------------------------
-
-//------------------Task 6--------------------------------
-// foreground idle thread that always runs without waiting or sleeping
-
-//******** Idle Task *************** 
+//------------------Idle Task--------------------------------
 // foreground thread, runs when nothing else does
 // never blocks, never sleeps, never dies
-// measures CPU idle time, i.e. CPU utilization
 // inputs:  none
 // outputs: none
-void
-Idle(void) {
-    // measure idle time only for the first 20s for this lab
-    while (NumSamples < RUNLENGTH) {
-        IdleCount++;  // measure of CPU idle time
-    }
-
-    // compute CPU utilization (in 0.01%)
-    CPUUtil = 10000 - (5 * IdleCount) / IdleCountRef;
-
-    while (1) {
-        // if you do not wish to measure CPU utilization using this idle task
-        // you can execute WaitForInterrupt to put processor to sleep
-        WaitForInterrupt();
-    }
+void Idle(void){
+  IdleCount = 0;          
+  while(1) {
+    IdleCount++;
+    PD0 ^= 0x01;
+    WaitForInterrupt();
+  }
 }
 
-//--------------end of Task 6-----------------------------
+//--------------end of Idle Task-----------------------------
 
 //*******************final user main DEMONTRATE THIS TO TA**********
-int
-realmain(void) { // realmain
-    OS_Init();        // initialize, disable interrupts
-    ST7735_InitR(INITR_GREENTAB);             // LCD initialization
-    UART_Init();                              // serial I/O for interpreter
-    PortD_Init();     // debugging profile
-    MaxJitter = 0;    // in 1us units
-    DataLost = 0;     // lost data between producer and consumer
-    IdleCount = 0;
-    CPUUtil = 0;
-    NumSamples = 0;
-    FilterWork = 0;
-    PIDWork = 0;
+int realmain(void){ // realmain
+  OS_Init();        // initialize, disable interrupts
+  PortD_Init();     // debugging profile
+  MaxJitter = 0;    // in 1us units
+	
+  // hardware init
+  ADC_Init(0);  // sequencer 3, channel 0, PE3, sampling in Interpreter
 
-    // initialize communication channels
-    OS_MailBox_Init();
-    OS_Fifo_Init(64);    // ***note*** 4 is not big enough*****
+  Heap_Init();  // initialize heap
+  
+  // attach background tasks
+  OS_AddPeriodicThread(&disk_timerproc,TIME_1MS,0);   // time out routines for disk  
+  OS_AddSW1Task(&SW1Push,2);
+  OS_AddSW2Task(&SW2Push,2);  
 
-    // hardware init
-    ADC_Init(0);  // sequencer 3, channel 0, PE3, sampling in DAS()
-
-    // attach background tasks
-    OS_AddSW1Task(&SW1Push, 2);
-    OS_AddSW2Task(&SW2Push, 2);  // added in Lab 3
-    OS_AddPeriodicThread(&DAS, PERIOD1, 1); // 2 kHz real time sampling of PE3
-    OS_AddPeriodicThread(&PID, PERIOD2, 2); // Lab 3 PID, lowest priority
-
-    // create initial foreground threads
-    NumCreated = 0;
-    NumCreated += OS_AddThread(&Consumer, 128, 1);
-    NumCreated += OS_AddThread(&Interpreter, 128, 2);
-    NumCreated += OS_AddThread(&Idle, 128, 5);  // Lab 3, at lowest priority
-
-    OS_Launch(TIME_2MS); // doesn't return, interrupts enabled in here
-    return 0;            // this never executes
+  // create initial foreground threads
+  NumCreated = 0;
+  NumCreated += OS_AddThread(&Interpreter,128,2); 
+  NumCreated += OS_AddThread(&Idle,128,5);  // at lowest priority 
+ 
+  OS_Launch(TIME_2MS); // doesn't return, interrupts enabled in here
+  return 0;            // this never executes
 }
 
 //+++++++++++++++++++++++++DEBUGGING CODE++++++++++++++++++++++++
 // ONCE YOUR RTOS WORKS YOU CAN COMMENT OUT THE REMAINING CODE
 // 
-//*******************Initial TEST**********
-// This is the simplest configuration, test this first, (Lab 2 part 1)
-// run this with 
+
+//*****************File System Test*************************
+// Tests integration of FAT filesystem for Lab 5. This should succeed. 
+// Warning: this reformats the disk, all existing data will be lost
+void diskError(const char* errtype, uint32_t n){
+	UART_OutStringNonBlock((char *) errtype);
+  OS_Kill();
+}
+char const string1[]="Filename = ";
+char const string2_1[]="File size = ";
+char const string2_2[]=" bytes";
+char const string3[]="Number of Files = ";
+char const string4[]="Number of Bytes = ";
+uint32_t FileTestRunning = 0; 
+void TestDirectory(void){ char *name; unsigned long size; 
+  unsigned int num;
+  unsigned long total;
+  num = 0;
+  total = 0;
+	UART_OutStringNonBlock("\n\r");
+  if(eFile_DOpen(""))           diskError("eFile_DOpen",0);
+  while(!eFile_DirNext(&name, &size)){
+		UART_OutStringNonBlock((char *) string1);
+		UART_OutStringNonBlock(name);
+		UART_OutStringNonBlock("  ");
+		
+		UART_OutStringNonBlock((char *) string2_1);
+		UART_OutUDecNonBlock(size);
+		UART_OutStringNonBlock((char *) string2_2);
+		
+		UART_OutStringNonBlock("\n\r");
+    total = total+size;
+    num++;    
+  }
+	UART_OutStringNonBlock((char *) string3);
+	UART_OutUDecNonBlock(num);
+	UART_OutStringNonBlock("\n\r");
+	UART_OutStringNonBlock((char *) string4);
+	UART_OutUDecNonBlock(total);
+	UART_OutStringNonBlock("\n\r");
+  if(eFile_DClose())            diskError("eFile_DClose",0);
+}
+void TestFile(void){   int i; char data; 
+  printf("\n\rEE445M/EE380L, Lab 5 eFile test\n\r");
+  ST7735_DrawString(0, 1, "eFile test      ", ST7735_WHITE);
+  // simple test of eFile
+  if(eFile_Init())              diskError("eFile_Init",0); 
+  if(eFile_Mount())             diskError("eFile_Mount",0);
+  if(eFile_Format())            diskError("eFile_Format",0); 
+  TestDirectory();
+  if(eFile_Create("file1"))     diskError("eFile_Create",0);
+  if(eFile_WOpen("file1"))      diskError("eFile_WOpen",0);
+  for(i=0;i<1000;i++){
+    if(eFile_Write('a'+i%26))   diskError("eFile_Write",i);
+    if(i%52==51){
+      if(eFile_Write('\n'))     diskError("eFile_Write",i);  
+      if(eFile_Write('\r'))     diskError("eFile_Write",i);
+    }
+  }
+  if(eFile_WClose())            diskError("eFile_WClose",0);
+  TestDirectory();
+  if(eFile_ROpen("file1"))      diskError("eFile_ROpen",0);
+  for(i=0;i<1000;i++){
+    if(eFile_ReadNext(&data))   diskError("eFile_ReadNext",i);
+    UART_OutChar(data);
+  }
+  if(eFile_Delete("file1"))     diskError("eFile_Delete",0);
+  TestDirectory();
+  if(eFile_Unmount())           diskError("eFile_Unmount",0);
+  printf("Successful test\n\r");
+  ST7735_DrawString(0, 1, "eFile successful", ST7735_YELLOW);
+  FileTestRunning=0; // launch again
+  OS_Kill();
+}
+
+void SWPushFile(void){
+  if(FileTestRunning==0){
+    FileTestRunning = 1;  // prevents you from starting two test threads
+    NumCreated += OS_AddThread(&TestFile,128,1);  // test eFile
+  }
+}
+
+int TestmainFile(void){   // TestmainFile
+  OS_Init();           // initialize, disable interrupts
+  PortD_Init();
+  FileTestRunning = 1; 
+
+  // attach background tasks
+  OS_AddPeriodicThread(&disk_timerproc,TIME_1MS,0);   // time out routines for disk
+  OS_AddSW1Task(&SWPushFile,2);    // PF4, SW1
+  OS_AddSW2Task(&SWPushFile,2);    // PF0, SW2
+  
+  // create initial foreground threads
+  NumCreated = 0;
+  NumCreated += OS_AddThread(&TestFile,128,1);  
+  NumCreated += OS_AddThread(&Idle,128,3); 
+ 
+  OS_Launch(10*TIME_1MS); // doesn't return, interrupts enabled in here
+  return 0;               // this never executes
+}
+
+//*****************Test project 0*************************
+// This is the simplest configuration, 
+// Just see if you can import your OS
 // no UART interrupts
 // no SYSTICK interrupts
 // no timer interrupts
@@ -388,570 +270,354 @@ realmain(void) { // realmain
 uint32_t Count1;   // number of times thread1 loops
 uint32_t Count2;   // number of times thread2 loops
 uint32_t Count3;   // number of times thread3 loops
-uint32_t Count4;   // number of times thread4 loops
-uint32_t Count5;   // number of times thread5 loops
-void
-Thread1(void) {
-    Count1 = 0;
-    for (;;) {
-        PD0 ^= 0x01;       // heartbeat
-        Count1++;
-        OS_Suspend();      // cooperative multitasking
-    }
-}
-void
-Thread2(void) {
-    Count2 = 0;
-    for (;;) {
-        PD1 ^= 0x02;       // heartbeat
-        Count2++;
-        OS_Suspend();      // cooperative multitasking
-    }
-}
-void
-Thread3(void) {
-    Count3 = 0;
-    for (;;) {
-        PD2 ^= 0x04;       // heartbeat
-        Count3++;
-        OS_Suspend();      // cooperative multitasking
-    }
-}
-
-int
-Testmain1(void) {  // Testmain1
-    OS_Init();          // initialize, disable interrupts
-    PortD_Init();       // profile user threads
-    NumCreated = 0;
-    NumCreated += OS_AddThread(&Thread1, 128, 0);
-    NumCreated += OS_AddThread(&Thread2, 128, 0);
-    NumCreated += OS_AddThread(&Thread3, 128, 0);
-    // Count1 Count2 Count3 should be equal or off by one at all times
-    OS_Launch(TIME_2MS); // doesn't return, interrupts enabled in here
-    return 0;            // this never executes
-}
-
-//*******************Second TEST**********
-// Once the initalize test runs, test this (Lab 2 part 1)
-// no UART interrupts
-// SYSTICK interrupts, with or without period established by OS_Launch
-// no timer interrupts
-// no switch interrupts
-// no ADC serial port or LCD output
-// no calls to semaphores
-void
-Thread1b(void) {
-    Count1 = 0;
-    for (;;) {
-        PD0 ^= 0x01;       // heartbeat
-        Count1++;
-    }
-}
-void
-Thread2b(void) {
-    Count2 = 0;
-    for (;;) {
-        PD1 ^= 0x02;       // heartbeat
-        Count2++;
-    }
-}
-void
-Thread3b(void) {
-    Count3 = 0;
-    for (;;) {
-        PD2 ^= 0x04;       // heartbeat
-        Count3++;
-    }
-}
-
-int
-Testmain2(void) {  // Testmain2
-    OS_Init();          // initialize, disable interrupts
-    PortD_Init();       // profile user threads
-    NumCreated = 0;
-    NumCreated += OS_AddThread(&Thread1b, 128, 0);
-    NumCreated += OS_AddThread(&Thread2b, 128, 0);
-    NumCreated += OS_AddThread(&Thread3b, 128, 0);
-    // Count1 Count2 Count3 should be equal on average
-    // counts are larger than Testmain1
-
-    OS_Launch(TIME_2MS); // doesn't return, interrupts enabled in here
-    return 0;            // this never executes
-}
-
-//*******************Third TEST**********
-// Once the second test runs, test this (Lab 2 part 2)
-// no UART interrupts
-// SYSTICK interrupts, with or without period established by OS_Launch
-// no timer interrupts
-// no switch interrupts
-// no ADC serial port or LCD output
-// no calls to semaphores
-// tests AddThread, Sleep and Kill
-void
-Thread1c(void) {
-    int i;
-    Count1 = 0;
-    for (i = 0; i <= 42; i++) {
-        PD0 ^= 0x01;       // heartbeat
-        Count1++;
-    }
-    OS_Kill();
-    Count1 = 0;
-}
-void
-Thread2c(void) {
-    Count2 = 0;
-    for (;;) {
-        PD1 ^= 0x02;       // heartbeat
-        Count2++;
-        NumCreated += OS_AddThread(&Thread1c, 128, 0);
-        OS_Sleep(5);
-    }
-}
-void
-Thread3c(void) {
-    Count3 = 0;
-    for (;;) {
-        PD2 ^= 0x04;       // heartbeat
-        Count3++;
-    }
-}
-
-int
-Testmain3(void) {  // Testmain3
-    OS_Init();          // initialize, disable interrupts
-    PortD_Init();       // profile user threads
-    NumCreated = 0;
-    NumCreated += OS_AddThread(&Thread2c, 128, 0);
-    NumCreated += OS_AddThread(&Thread3c, 128, 0);
-    // Count3 should be larger than Count2, Count1 should be 42
-
-    OS_Launch(TIME_2MS); // doesn't return, interrupts enabled in here
-    return 0;            // this never executes
-}
-
-//*******************Fourth TEST**********
-// Once the third test runs, test this (Lab 2 part 2 and Lab 3)
-// no UART1 interrupts
-// SYSTICK interrupts, with or without period established by OS_Launch
-// Timer interrupts, with or without period established by OS_AddPeriodicThread
-// PortF GPIO interrupts, active low
-// no ADC serial port or LCD output
-// tests priorities and blocking semaphores, tests Sleep and Kill
-Sema4Type Readyd;        // set in background
-int Lost;
-void
-BackgroundThread1d(void) { // called at 1000 Hz
+void Thread1(void){
+  Count1 = 0;          
+  for(;;){
+    PD0 ^= 0x01;       // heartbeat
     Count1++;
-    OS_Signal(&Readyd);
+  }
 }
-void
-Thread5d(void) {                                                            // id 2
-    for (;;) {
-        OS_Wait(&Readyd);
-        Count5++;   // Count2 + Count5 should equal Count1
-        Lost = Count1 - Count5 - Count2;
-    }
+void Thread2(void){
+  Count2 = 0;          
+  for(;;){
+    PD1 ^= 0x02;       // heartbeat
+    Count2++;
+  }
 }
-void
-Thread2d(void) {                                                            // id 0
-    OS_InitSemaphore(&Readyd, 0);
-    Count1 = 0;    // number of times signal is called
-    Count2 = 0;
-    Count5 = 0;    // Count2 + Count5 should equal Count1
-    NumCreated += OS_AddThread(&Thread5d,128,1);
-    OS_AddPeriodicThread(&BackgroundThread1d, TIME_1MS, 0);
-    for (;;) {
-        OS_Wait(&Readyd);
+void Thread3(void){
+  Count3 = 0;          
+  for(;;){
+    PD2 ^= 0x04;       // heartbeat
+    Count3++;
+  }
+}
 
-        Count2++;   // Count2 + Count5 should equal Count1
-        Lost = Count1 - Count5 - Count2;
-    }
+int Testmain0(void){  // Testmain0
+  OS_Init();          // initialize, disable interrupts
+  PortD_Init();       // profile user threads
+  NumCreated = 0 ;
+  NumCreated += OS_AddThread(&Thread1,128,1); 
+  NumCreated += OS_AddThread(&Thread2,128,2); 
+  NumCreated += OS_AddThread(&Thread3,128,3); 
+  // Count1 Count2 Count3 should be equal or off by one at all times
+  OS_Launch(TIME_2MS); // doesn't return, interrupts enabled in here
+  return 0;            // this never executes
 }
-void
-Thread3d(void) {                                                            // id 1
-    Count3 = 0;
-    for (;;) {
-        Count3++;
-    }
+
+//*****************Test project 1*************************
+// Heap test, allocate and deallocate memory
+void heapError(const char* errtype,const char* v,uint32_t n){
+  //printf(errtype);
+  //printf(" heap error %s%u",v,n);
+  OS_Kill();
 }
-void
-Thread4d(void) {
-    int i;
-    for (i = 0; i < 64; i++) {
-        Count4++;
-        OS_Sleep(10);
+heap_stats_t stats;
+void heapStats(void){
+  if(Heap_Stats(&stats))  heapError("Heap_Stats","",0);
+  ST7735_Message(1,0,"Heap size  =",stats.size); 
+  ST7735_Message(1,1,"Heap used  =",stats.used);  
+  ST7735_Message(1,2,"Heap free  =",stats.free);
+  ST7735_Message(1,3,"Heap waste =",stats.size - stats.used - stats.free);
+}
+int16_t* ptr;  // Global so easier to see with the debugger
+int16_t* p1;   // Proper style would be to make these variables local
+int16_t* p2;
+int16_t* p3;
+uint8_t* q1;
+uint8_t* q2;
+uint8_t* q3;
+uint8_t* q4;
+uint8_t* q5;
+uint8_t* q6;
+int16_t maxBlockSize;
+uint8_t* bigBlock;
+void TestHeap(void){  int16_t i;  
+  ST7735_DrawString(0, 0, "Heap test            ", ST7735_WHITE);
+  UART_OutStringNonBlock("\n\rEE445M/EE380L, Lab 5 Heap Test\n\r");
+  if(Heap_Init())         heapError("Heap_Init","",0);
+
+  ptr = Heap_Malloc(sizeof(int16_t));
+  if(!ptr)                heapError("Heap_Malloc","ptr",0);
+  *ptr = 0x1111;
+
+  if(Heap_Free(ptr))      heapError("Heap_Free","ptr",0);
+
+  ptr = Heap_Malloc(1);
+  if(!ptr)                heapError("Heap_Malloc","ptr",1);
+
+  if(Heap_Free(ptr))      heapError("Heap_Free","ptr",1);
+
+  p1 = (int16_t*) Heap_Malloc(1 * sizeof(int16_t));
+  if(!p1)                 heapError("Heap_Malloc","p",1);
+  p2 = (int16_t*) Heap_Malloc(2 * sizeof(int16_t));
+  if(!p2)                 heapError("Heap_Malloc","p",2);
+  p3 = (int16_t*) Heap_Malloc(3 * sizeof(int16_t));
+  if(!p3)                 heapError("Heap_Malloc","p",3);
+  p1[0] = 0xAAAA;
+  p2[0] = 0xBBBB;
+  p2[1] = 0xBBBB;
+  p3[0] = 0xCCCC;
+  p3[1] = 0xCCCC;
+  p3[2] = 0xCCCC;
+  heapStats();
+
+  if(Heap_Free(p1))       heapError("Heap_Free","p",1);
+  if(Heap_Free(p3))       heapError("Heap_Free","p",3);
+
+  if(Heap_Free(p2))       heapError("Heap_Free","p",2);
+  heapStats();
+
+  for(i = 0; i <= (stats.size / sizeof(int32_t)); i++){
+		/*if (i == 513) {
+			volatile int x = 0;
+		}*/
+    ptr = Heap_Malloc(sizeof(int16_t));
+    if(!ptr) break;
+  }
+  if(ptr)                 heapError("Heap_Malloc","i",i);
+  heapStats();
+  
+	UART_OutStringNonBlock("Realloc test\n\r");
+  if(Heap_Init())         heapError("Heap_Init","",1);
+  q1 = Heap_Malloc(1);
+  if(!q1)                 heapError("Heap_Malloc","q",1);
+  q2 = Heap_Malloc(2);
+  if(!q2)                 heapError("Heap_Malloc","q",2);
+  q3 = Heap_Malloc(3);
+  if(!q3)                 heapError("Heap_Malloc","q",3);
+  q4 = Heap_Malloc(4);
+  if(!q4)                 heapError("Heap_Malloc","q",4);
+  q5 = Heap_Malloc(5);
+  if(!q5)                 heapError("Heap_Malloc","q",5);
+
+  *q1 = 0xDD;
+  q6 = Heap_Realloc(q1, 6);
+  heapStats();
+
+  for(i = 0; i < 6; i++){
+    q6[i] = 0xEE;
+  }
+  q1 = Heap_Realloc(q6, 2);
+  heapStats();
+
+	UART_OutStringNonBlock("Large block test\n\r");
+  if(Heap_Init())         heapError("Heap_Init","",2);
+  heapStats();
+  maxBlockSize = stats.free;
+  bigBlock = Heap_Malloc(maxBlockSize);
+  for(i = 0; i < maxBlockSize; i++){
+    bigBlock[i] = 0xFF;
+  }
+  heapStats();
+  if(Heap_Free(bigBlock)) heapError("Heap_Free","bigBlock",0);
+
+  bigBlock = Heap_Calloc(maxBlockSize);
+  if(!bigBlock)           heapError("Heap_Calloc","bigBlock",0);
+  if(*bigBlock)           heapError("Zero initialization","bigBlock",0);
+  heapStats();
+
+  if(Heap_Free(bigBlock)) heapError("Heap_Free","bigBlock",0);
+  heapStats();
+  
+	UART_OutStringNonBlock("Successful heap test\n\r");
+  ST7735_DrawString(0, 0, "Heap test successful", ST7735_YELLOW);
+  OS_Kill();
+}
+
+void SW1Push1(void){
+  if(OS_MsTime() > 20){ // debounce
+    if(OS_AddThread(&TestHeap,128,1)){
+      NumCreated++;
     }
+    OS_ClearMsTime();  // at least 20ms between touches
+  }
+}
+
+int Testmain1(void){   // Testmain1
+  OS_Init();           // initialize, disable interrupts
+  PortD_Init();
+
+  // attach background tasks
+  OS_AddSW1Task(&SW1Push1,2);
+    
+  // create initial foreground threads
+  NumCreated = 0 ;
+  NumCreated += OS_AddThread(&TestHeap,128,1);  
+  NumCreated += OS_AddThread(&Idle,128,3); 
+ 
+  OS_Launch(10*TIME_1MS); // doesn't return, interrupts enabled in here
+  return 0;               // this never executes
+}
+
+//*****************Test project 2*************************
+// Process management test, add and reclaim dummy process
+void TestUser(void){ uint32_t id; uint32_t time;
+  id = OS_Id();
+  PD2 ^= 0x04;
+  ST7735_Message(0,1, "Hello world: ", id);
+  time = OS_Time();
+  OS_Sleep(1000);
+  time = (((OS_TimeDifference(time, OS_Time()))/1000ul)*125ul)/10000ul;
+  ST7735_Message(0,2, "Sleep time: ", time);
+  PD2 ^= 0x04;
+  OS_Kill();
+}
+
+//  OS-internal OS_AddProcess function
+extern int OS_AddProcess(void(*entry)(void), void *text, void *data, 
+  unsigned long stackSize, unsigned long priority); 
+
+void TestProcess(void){ heap_stats_t heap1, heap2;
+  // simple process management test, add process with dummy code and data segments
+  ST7735_DrawString(0, 0, "Process test         ", ST7735_WHITE);
+	UART_OutStringNonBlock("\n\rEE445M/EE380L, Lab 5 Process Test\n\r");
+  PD1 ^= 0x02;
+  if(Heap_Stats(&heap1)) OS_Kill();
+  PD1 ^= 0x02;
+  ST7735_Message(1,0,"Heap size  =",heap1.size); 
+  ST7735_Message(1,1,"Heap used  =",heap1.used);  
+  ST7735_Message(1,2,"Heap free  =",heap1.free);
+  ST7735_Message(1,3,"Heap waste =",heap1.size - heap1.used - heap1.free);
+  PD1 ^= 0x02;
+  if(!OS_AddProcess(&TestUser,Heap_Calloc(128),Heap_Calloc(128),128,1)){
+		UART_OutStringNonBlock("OS_AddProcess error");
     OS_Kill();
-    Count4 = 0;
-}
-void
-BackgroundThread5d(void) {   // called when Select button pushed
-    NumCreated += OS_AddThread(&Thread4d, 128, 1);
-}
-
-int
-Testmain4(void) {   // Testmain4
-    Count4 = 0;
-    OS_Init();           // initialize, disable interrupts
-    // Count2 + Count5 should equal Count1
-    // With priorities, Count5 should be zero
-    // Count4 increases by 64 every time select is pressed
-    NumCreated = 0;
-    OS_AddSW1Task(&BackgroundThread5d,2);
-    NumCreated += OS_AddThread(&Thread2d, 128, 0); // Lab 3 highest priority
-    NumCreated += OS_AddThread(&Thread3d,128,1);
-    NumCreated += OS_AddThread(&Thread4d,128,1);
-    OS_Launch(TIME_2MS); // doesn't return, interrupts enabled in here
-    return 0;            // this never executes
-}
-
-//*******************Fith TEST**********
-// Once the fourth test runs, run this example (Lab 2 part 2 and Lab 3)
-// no UART interrupts
-// SYSTICK interrupts, with or without period established by OS_Launch
-// Timer interrupts, with or without period established by OS_AddPeriodicThread
-// Select switch interrupts, active low
-// no ADC serial port or LCD output
-// tests the blocking semaphores, tests Sleep and Kill
-// uses priorities to test proper blocking of sempahore waits
-Sema4Type Readye;        // set in background
-void
-BackgroundThread1e(void) {   // called at 1000 Hz
-    static int i = 0;
-    i++;
-    if (i == 50) {
-        i = 0;         //every 50 ms
-        Count1++;
-        OS_Signal(&Readye);
-    }
-}
-void
-Thread2e(void) {
-    OS_InitSemaphore(&Readye, -1);
-    Count1 = 0;
-    Count2 = 0;
-    for (;;) {
-        OS_Wait(&Readye);
-        Count2++;     // Count2 should be equal to Count1
-    }
-}
-void
-Thread3e(void) {
-    Count3 = 0;
-    for (;;) {
-        Count3++;     // Count3 should be large
-    }
-}
-void
-Thread4e(void) {
-    int i;
-    for (i = 0; i < 640; i++) {
-        Count4++;     // Count4 should increase on button press
-        OS_Sleep(2);
-    }
+  }
+  PD1 ^= 0x02;
+  OS_Sleep(2000); // wait long enough for user thread and hence process to exit/die
+  PD1 ^= 0x02;
+  if(Heap_Stats(&heap2)) OS_Kill();
+  PD1 ^= 0x02;
+  ST7735_Message(1,0,"Heap size  =",heap2.size); 
+  ST7735_Message(1,1,"Heap used  =",heap2.used);  
+  ST7735_Message(1,2,"Heap free  =",heap2.free);
+  ST7735_Message(1,3,"Heap waste =",heap2.size - heap2.used - heap2.free);
+  PD1 ^= 0x02;
+  if((heap1.free != heap2.free)||(heap1.used != heap2.used)){
+		UART_OutStringNonBlock("Process management heap error");
     OS_Kill();
-}
-void
-BackgroundThread5e(void) {   // called when Select button pushed
-    NumCreated += OS_AddThread(&Thread4e, 128, 1);
-}
-
-int
-Testmain5(void) {   // Testmain5
-    Count4 = 0;
-    OS_Init();           // initialize, disable interrupts
-    // Count1 should exactly equal Count2
-    // Count3 should be very large
-    // Count4 increases by 640 every time select is pressed
-    NumCreated = 0;
-    OS_AddPeriodicThread(&BackgroundThread1e, PERIOD1, 0);
-    OS_AddSW1Task(&BackgroundThread5e, 2);
-    NumCreated += OS_AddThread(&Thread2e, 128, 0); // Lab 3 set to highest priority
-    NumCreated += OS_AddThread(&Thread3e, 128, 1);
-    NumCreated += OS_AddThread(&Thread4e, 128, 1);
-    OS_Launch(TIME_2MS); // doesn't return, interrupts enabled in here
-    return 0;            // this never executes
+  }
+	UART_OutStringNonBlock("Successful process test\n\r");
+  ST7735_DrawString(0, 0, "Process test successful", ST7735_YELLOW);
+  OS_Kill();  
 }
 
-//******************* Lab 3 Procedure 2**********
-// Modify this so it runs with your RTOS (i.e., fix the time units to match your OS)
-// run this with 
-// UART0, 115200 baud rate, used to output results 
-// SYSTICK interrupts, period established by OS_Launch
-// first timer interrupts, period established by first call to OS_AddPeriodicThread
-// second timer interrupts, period established by second call to OS_AddPeriodicThread
-// SW1 no interrupts
-// SW2 no interrupts
-uint32_t CountA;   // number of times Task A called
-uint32_t CountB;   // number of times Task B called
-uint32_t Count1;   // number of times thread1 loops
-
-// simple time delay, simulates user program doing real work
-// Input: amount of work in 100ns units (free free to change units)
-void
-PseudoWork(uint32_t work) {
-    uint32_t startTime;
-    startTime = OS_Time();    // time in 100ns units
-    while (OS_TimeDifference(startTime, OS_Time()) <= work) {
+void SW2Push2(void){
+  if(OS_MsTime() > 20){ // debounce
+    if(OS_AddThread(&TestProcess,128,1)){
+      NumCreated++;
     }
+    OS_ClearMsTime();  // at least 20ms between touches
+  }
 }
-void
-Thread6(void) {  // foreground thread
-    Count1 = 0;
-    for (;;) {
-        Count1++;
-        PD0 ^= 0x01;        // debugging toggle bit 0
-    }
+
+int Testmain2(void){   // Testmain2 
+  OS_Init();           // initialize, disable interrupts
+  PortD_Init();
+
+  // attach background tasks
+  OS_AddSW1Task(&SW1Push1,2);  // PF4, SW1
+  OS_AddSW2Task(&SW2Push2,2);  // PF0, SW2
+  
+  // create initial foreground threads
+  NumCreated = 0;
+  NumCreated += OS_AddThread(&TestProcess,128,1);  
+  NumCreated += OS_AddThread(&Idle,128,3); 
+ 
+  OS_Launch(10*TIME_1MS); // doesn't return, interrupts enabled in here
+  return 0;               // this never executes
 }
-extern void
-Jitter(int32_t, uint32_t const, uint32_t[]); // prints jitter information (write this)
-void
-Thread7(void) {  // foreground thread
-    UART_OutString("\n\rEE345M/EE380L, Lab 3 Procedure 2\n\r");
-    OS_Sleep(5000);   // 10 seconds
-    Jitter(MaxJitter, JitterSize, JitterHistogram);  // print jitter information
-    Jitter(MaxJitter2, JitterSize2, JitterHistogram2);  // print jitter of second thread
-    UART_OutString("\n\r\n\r");
+
+//*****************Test project 3*************************
+// Test supervisor calls (SVC exceptions)
+// Using inline assembly, syntax is dependent on the compiler
+// The following code compiles in Keil 5.x (even though the UI complains)
+__asm uint32_t SVC_OS_Id(void){
+    SVC #0
+    BX  LR
+  }
+__asm void SVC_OS_Kill(void){
+    SVC #1
+    BX  LR
+  }
+__asm void SVC_OS_Sleep(uint32_t t){
+    SVC #2
+    BX  LR
+  }
+__asm uint32_t SVC_OS_Time(void){
+    SVC #3
+    BX  LR
+  }
+__asm int SVC_OS_AddThread(void(*t)(void), uint32_t s, uint32_t p){
+    SVC #4
+    BX  LR
+  }
+uint32_t line = 0;
+void TestSVCThread(void){ uint32_t id;	
+  id = SVC_OS_Id();
+  PD3 ^= 0x08;
+  ST7735_Message(0,line++, "Thread: ", id);
+  SVC_OS_Sleep(500);
+  ST7735_Message(0,line++, "Thread dying: ", id);
+  PD3 ^= 0x08;
+  SVC_OS_Kill();
+}
+void TestSVC(void){ uint32_t id; uint32_t time;
+  // simple SVC test, mimicking real user program
+  ST7735_DrawString(0, 0, "SVC test         ", ST7735_WHITE);
+	UART_OutStringNonBlock("\n\rEE445M/EE380L, Lab 5 SCV Test\n\r");
+  id = SVC_OS_Id();
+  PD2 ^= 0x04;
+  ST7735_Message(0,line++, "SVC test: ", id);
+  SVC_OS_AddThread(TestSVCThread, 128, 1);
+  time = SVC_OS_Time();
+  SVC_OS_Sleep(1000);
+  time = (((OS_TimeDifference(time, SVC_OS_Time()))/1000ul)*125ul)/10000ul;
+  ST7735_Message(0,line++, "Sleep time: ", time);
+  PD2 ^= 0x04;
+  if(line != 4) {
+		UART_OutStringNonBlock("SVC test error");
     OS_Kill();
-}
-#define workA 500       // {5,50,500 us} work in Task A
-#define counts1us 10    // number of OS_Time counts per 1us
-void
-TaskA(void) {       // called every {1000, 2990us} in background
-    PD1 = 0x02;      // debugging profile
-    CountA++;
-    PseudoWork(workA * counts1us); //  do work (100ns time resolution)
-    PD1 = 0x00;      // debugging profile
-}
-#define workB 250       // 250 us work in Task B
-void
-TaskB(void) {       // called every pB in background
-    PD2 = 0x04;      // debugging profile
-    CountB++;
-    PseudoWork(workB * counts1us); //  do work (100ns time resolution)
-    PD2 = 0x00;      // debugging profile
+  }
+	UART_OutStringNonBlock("Successful SVC test\n\r");
+  ST7735_Message(0,0, "SVC test done ", id);
+  SVC_OS_Kill();
 }
 
-int
-Testmain6(void) {       // Testmain6 Lab 3
-    UART_Init();                              // serial I/O for interpreter
-    PortD_Init();
-    OS_Init();           // initialize, disable interrupts
-    NumCreated = 0;
-    NumCreated += OS_AddThread(&Thread7, 128, 1);
-    NumCreated += OS_AddThread(&Thread6, 128, 2);
-    OS_AddPeriodicThread(&TaskA, TIME_1MS, 0);          // 1 ms, higher priority
-    OS_AddPeriodicThread(&TaskB, 2 * TIME_1MS, 1);       // 2 ms, lower priority
-
-    OS_Launch(TIME_2MS); // 2ms, doesn't return, interrupts enabled in here
-    return 0;             // this never executes
+void SWPush3(void){
+  if(line>=4){
+    line = 0;
+    if(OS_AddThread(&TestSVC,128,1)){
+      NumCreated++;
+    }
+  }
 }
 
-//******************* Lab 3 Procedure 4**********
-// Modify this so it runs with your RTOS used to test blocking semaphores
-// run this with 
-// UART0, 115200 baud rate,  used to output results 
-// SYSTICK interrupts, period established by OS_Launch
-// first timer interrupts, period established by first call to OS_AddPeriodicThread
-// second timer interrupts, period established by second call to OS_AddPeriodicThread
-// SW1 no interrupts, 
-// SW2 no interrupts
-Sema4Type s;            // test of this counting semaphore
-uint32_t SignalCount1;   // number of times s is signaled
-uint32_t SignalCount2;   // number of times s is signaled
-uint32_t SignalCount3;   // number of times s is signaled
-uint32_t WaitCount1;     // number of times s is successfully waited on
-uint32_t WaitCount2;     // number of times s is successfully waited on
-uint32_t WaitCount3;     // number of times s is successfully waited on
-#define MAXCOUNT 20000
-void
-OutputThread(void) {  // foreground thread
-    UART_OutString("\n\rEE445M/EE380L, Lab 3 Procedure 4\n\r");
-    while (SignalCount1 + SignalCount2 + SignalCount3 < 100 * MAXCOUNT) {
-        OS_Sleep(1000);   // 1 second
-        UART_OutString(".");
-    }
-    UART_OutString(" done\n\r");
-    UART_OutString("Signalled=");
-    UART_OutUDec(SignalCount1 + SignalCount2 + SignalCount3);
-    UART_OutString(", Waited=");
-    UART_OutUDec(WaitCount1 + WaitCount2 + WaitCount3);
-    UART_OutString("\n\r");
-    OS_Kill();
-}
-void
-Wait1(void) {  // foreground thread
-    for (;;) {
-        OS_Wait(&s);    // three threads waiting
-        WaitCount1++;
-    }
-}
-void
-Wait2(void) {  // foreground thread
-    for (;;) {
-        OS_Wait(&s);    // three threads waiting
-        WaitCount2++;
-    }
-}
-void
-Wait3(void) {   // foreground thread
-    for (;;) {
-        OS_Wait(&s);    // three threads waiting
-        WaitCount3++;
-    }
-}
-void
-Signal1(void) {      // called every 799us in background
-    if (SignalCount1 < MAXCOUNT) {
-        OS_Signal(&s);
-        SignalCount1++;
-    }
-}
-// edit this so it changes the periodic rate
-void
-Signal2(void) {       // called every 1111us in background
-    if (SignalCount2 < MAXCOUNT) {
-        OS_Signal(&s);
-        SignalCount2++;
-    }
-}
-void
-Signal3(void) {       // foreground
-    while (SignalCount3 < 98 * MAXCOUNT) {
-        OS_Signal(&s);
-        SignalCount3++;
-    }
-    OS_Kill();
-}
+int Testmain3(void){   // Testmain3 
+  OS_Init();           // initialize, disable interrupts
+  PortD_Init();
 
-int32_t
-add(const int32_t n, const int32_t m) {
-    static int32_t result;
-    result = m + n;
-    return result;
-}
-int
-Testmain7(void) {      // Testmain7  Lab 3
-    volatile uint32_t delay;
-    UART_Init();                              // serial I/O for interpreter
-    OS_Init();           // initialize, disable interrupts
-    delay = add(3, 4);
-    PortD_Init();
-    SignalCount1 = 0;   // number of times s is signaled
-    SignalCount2 = 0;   // number of times s is signaled
-    SignalCount3 = 0;   // number of times s is signaled
-    WaitCount1 = 0;     // number of times s is successfully waited on
-    WaitCount2 = 0;     // number of times s is successfully waited on
-    WaitCount3 = 0;    // number of times s is successfully waited on
-    OS_InitSemaphore(&s, 0);   // this is the test semaphore
-    OS_AddPeriodicThread(&Signal1, (799 * TIME_1MS) / 1000, 0); // 0.799 ms, higher priority
-    OS_AddPeriodicThread(&Signal2, (1111 * TIME_1MS) / 1000, 1); // 1.111 ms, lower priority
-    NumCreated = 0;
-    NumCreated += OS_AddThread(&OutputThread, 128, 2);  // results output thread
-    NumCreated += OS_AddThread(&Signal3, 128, 2);   // signalling thread
-    NumCreated += OS_AddThread(&Wait1, 128, 1);   // waiting thread
-    NumCreated += OS_AddThread(&Wait2, 128, 1);   // waiting thread
-    NumCreated += OS_AddThread(&Wait3, 128, 1);   // waiting thread
-    NumCreated += OS_AddThread(&Thread6, 128, 5); // idle thread to keep from crashing
-
-    OS_Launch(TIME_1MS);  // 1ms, doesn't return, interrupts enabled in here
-    return 0;             // this never executes
-}
-
-//*******************Measurement of context switch time**********
-// Run this to measure the time it takes to perform a task switch
-// UART0 not needed 
-// SYSTICK interrupts, period established by OS_Launch
-// first timer not needed
-// second timer not needed
-// SW1 not needed, 
-// SW2 not needed
-// logic analyzer on PF1 for systick interrupt (in your OS)
-//                on PD0 to measure context switch time
-void
-ThreadCS(void) {       // only thread running
-    while (1) {
-        PD0 ^= 0x01;      // debugging profile
-    }
-}
-int
-TestmainCS(void) {       // TestmainCS
-    PortD_Init();
-    OS_Init();           // initialize, disable interrupts
-    NumCreated = 0;
-    NumCreated += OS_AddThread(&ThreadCS, 128, 0);
-    OS_Launch(TIME_1MS / 10); // 100us, doesn't return, interrupts enabled in here
-    return 0;             // this never executes
-}
-
-//*******************FIFO TEST**********
-// FIFO test
-// Count1 should exactly equal Count2
-// Count3 should be very large
-// Timer interrupts, with period established by OS_AddPeriodicThread
-uint32_t OtherCount1;
-uint32_t Expected8; // last data read+1
-uint32_t Error8;
-void
-ConsumerThreadFIFO(void) {
-    Count2 = 0;
-    for (;;) {
-        OtherCount1 = OS_Fifo_Get();
-        if (OtherCount1 != Expected8) {
-            Error8++;
-        }
-        Expected8 = OtherCount1 + 1; // should be sequential
-        Count2++;
-    }
-}
-void
-FillerThreadFIFO(void) {
-    Count3 = 0;
-    for (;;) {
-        Count3++;
-    }
-}
-void
-BackgroundThreadFIFOProducer(void) {   // called periodically
-    if (OS_Fifo_Put(Count1) == 0) { // send to consumer
-        DataLost++;
-    }
-    Count1++;
-}
-
-int
-TestmainFIFO(void) {   // TestmainFIFO
-    Count1 = 0;
-    DataLost = 0;
-    Expected8 = 0;
-    Error8 = 0;
-    OS_Init();           // initialize, disable interrupts
-    NumCreated = 0;
-    OS_AddPeriodicThread(&BackgroundThreadFIFOProducer, PERIOD1, 0);
-    OS_Fifo_Init(16);
-    NumCreated += OS_AddThread(&ConsumerThreadFIFO, 128, 2);
-    NumCreated += OS_AddThread(&FillerThreadFIFO, 128, 3);
-    OS_Launch(TIME_2MS); // doesn't return, interrupts enabled in here
-    return 0;            // this never executes
+  // attach background tasks
+  OS_AddSW1Task(&SWPush3,2);  // PF4, SW1
+  OS_AddSW2Task(&SWPush3,2);  // PF0, SW2
+  
+  // create initial foreground threads
+  NumCreated = 0;
+  NumCreated += OS_AddThread(&TestSVC,128,1);  
+  NumCreated += OS_AddThread(&Idle,128,3); 
+ 
+  OS_Launch(10*TIME_1MS); // doesn't return, interrupts enabled in here
+  return 0;               // this never executes
 }
 
 //*******************Trampoline for selecting main to execute**********
-int
-main(void) { 			// main
-    PLL_Init(Bus80MHz);
-    GPIO_Initialize();
-    Launchpad_PortFInitialize();
-
-//    Testmain1();
-//    Testmain2();
-//    Testmain3();
-//    Testmain4();
-//    Testmain5();
-//    Testmain6();
-//    Testmain7();
-//    TestmainFIFO();
-//    TestmainCS();
-    realmain();
+int main(void) { 			// main
+	PLL_Init(Bus80MHz);
+	GPIO_Initialize();
+	Launchpad_PortFInitialize();
+	ST7735_InitR(INITR_GREENTAB);             // LCD initialization
+	UART_Init();                              // serial I/O for interpreter
+	
+	TestHeap();
+//  realmain();
 }
