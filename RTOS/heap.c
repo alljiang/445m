@@ -35,9 +35,6 @@
 
 #define HEAP_SIZE  2048u
 
-#define set16(array, index, value) (array[index] = (value) >> 8, array[index+1] = (value) & 0xFF)
-#define get16(array, index) ((array[index] << 8) | array[index+1])
-
 int heap[HEAP_SIZE];
 
 //******** Heap_Init *************** 
@@ -50,7 +47,7 @@ int32_t Heap_Init(void){
   memset(heap, 0, HEAP_SIZE);  
   
   // initialize the free block, leaving room for the header
-  set16(heap, 0, HEAP_SIZE - 2);
+  heap[0] = HEAP_SIZE - 1;
 
   return 0;   // replace
 }
@@ -66,25 +63,25 @@ void* Heap_Malloc(int32_t desiredBytes){
   void* rv = 0;
 
   // find the first free block that is large enough
-  uint16_t search_index = 0;
+  int search_index = 0;
 	bool foundFreeBlock = false;
 
   while (search_index < HEAP_SIZE) {
-    int16_t free_size = get16(heap, search_index);
+    int free_size = heap[search_index];
     
     if (free_size >= desiredBytes) {
       // found a free block that is large enough
 
-      // if the remainder is <= 2, then we can just use the whole block
-      if (free_size - desiredBytes<= 2) {
+      // if the remainder is <= 1, then we can just use the whole block
+      if (free_size - desiredBytes <= 1) {
         // use entire block
-        set16(heap, search_index, -free_size);
+        heap[search_index] = -free_size;
       } else {
         // only use desired number of bytes of the block
-        set16(heap, search_index, -desiredBytes);
+        heap[search_index] = -desiredBytes;
 
         // set the remainder to free
-        set16(heap, search_index + desiredBytes + 2, free_size - desiredBytes - 2);
+        heap[search_index + desiredBytes + 1] = free_size - desiredBytes - 1;
       }
 
 			foundFreeBlock = true;
@@ -99,7 +96,7 @@ void* Heap_Malloc(int32_t desiredBytes){
         search_index += free_size;
       }
       // account for header
-      search_index += 2;
+      search_index += 1;
     }
   }
   
@@ -109,7 +106,8 @@ void* Heap_Malloc(int32_t desiredBytes){
   } else {
     // found a free block large enough
     // allocate the block, account for header
-    rv = &heap[search_index + 2];
+		int* address = heap + search_index + 1;
+    rv = address;
   }
 
   return (void *) rv;
@@ -153,26 +151,34 @@ void* Heap_Realloc(void* oldBlock, int32_t desiredBytes){
 }
 
 void mergeFreeBlocks() {
-  uint16_t search_index = 0;
-  uint16_t next_search_index = 0;
-  while (search_index < HEAP_SIZE) {
-    int16_t free_size = get16(heap, search_index);
-    if (free_size < 0) {
-      // this block is not free
-      next_search_index = search_index - free_size + 2;
-    } else {
-      next_search_index = search_index + free_size + 2;
+  bool loopAgain = true;
 
-      // check if the next block is also free
-      int16_t next_free_size = get16(heap, next_search_index);
-      if (next_free_size > 0) {
-        // merge the two blocks
-        set16(heap, search_index, free_size + next_free_size + 2);
-        next_search_index += next_free_size + 2;
+  while(loopAgain) {
+    loopAgain = false;
+
+    uint16_t search_index = 0;
+    uint16_t next_search_index = 0;
+    while (search_index < HEAP_SIZE) {
+      int16_t free_size = heap[search_index];
+      if (free_size < 0) {
+        // this block is not free
+        next_search_index = search_index - free_size + 1;
+      } else {
+        next_search_index = search_index + free_size + 1;
+
+        // check if the next block is also free
+        int16_t next_free_size = heap[next_search_index];
+        if (next_free_size > 0) {
+          // merge the two blocks
+          heap[search_index] = free_size + next_free_size + 1;
+          next_search_index += next_free_size + 1;
+
+          loopAgain = true;
+        }
       }
-    }
 
-    search_index = next_search_index;
+      search_index = next_search_index;
+    }
   }
 }
 
@@ -184,7 +190,7 @@ void mergeFreeBlocks() {
 int32_t Heap_Free(void* pointer){
   int32_t rv = 0;
 
-  int16_t blockIndex = ((uintptr_t) pointer - (uintptr_t) heap) - 2;
+  int16_t blockIndex = ((uintptr_t) pointer - (uintptr_t) heap) / sizeof(int) - 1;
 	int16_t blockSize;
 
   if (blockIndex < 0 || blockIndex >= HEAP_SIZE) {
@@ -193,7 +199,7 @@ int32_t Heap_Free(void* pointer){
     goto exit;
   }
 
-  blockSize = get16(heap, blockIndex);
+  blockSize = heap[blockIndex];
 
   if (blockSize > 0) {
     // block is already unallocated
@@ -202,7 +208,7 @@ int32_t Heap_Free(void* pointer){
   }
 
   // mark the block as free
-  set16(heap, blockIndex, -blockSize);
+  heap[blockIndex] = -blockSize;
 
   mergeFreeBlocks();
 exit:
@@ -224,7 +230,7 @@ int32_t Heap_Stats(heap_stats_t *stats){
   int used_size = 0;
 
   while (blockIndex < HEAP_SIZE) {
-    int16_t blockSize = get16(heap, blockIndex);
+    int16_t blockSize = heap[blockIndex];
 
     if (blockSize > 0) {
       // this block is free
@@ -236,7 +242,7 @@ int32_t Heap_Stats(heap_stats_t *stats){
 			blockIndex -= blockSize;
     }
 
-    blockIndex += 2;
+    blockIndex += 1;
   }
 
   if (free_size < 0 || used_size < 0) {

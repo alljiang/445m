@@ -159,8 +159,6 @@ int realmain(void){ // realmain
 	
   // hardware init
   ADC_Init(0);  // sequencer 3, channel 0, PE3, sampling in Interpreter
-
-  Heap_Init();  // initialize heap
   
   // attach background tasks
   OS_AddPeriodicThread(&disk_timerproc,TIME_1MS,0);   // time out routines for disk  
@@ -641,9 +639,9 @@ int main(void) { 			// main
 	UART_Init();                              // serial I/O for interpreter
 	Heap_Init();
 	
-	Testmain0();
+	//Testmain0();
 	//Testmain1();
-	//Testmain2();
+	Testmain2();
 	//Testmain3();
   //realmain();
 }

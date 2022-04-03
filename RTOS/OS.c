@@ -118,6 +118,11 @@ OS_Init(void) {
     for (int i = 0; i < MAX_THREADS_COUNT; i++) {
         tcb_list[i].id = -1;
     }
+		
+    // label all processes in list as dead
+    for (int i = 0; i < MAX_PROCESSES_COUNT; i++) {
+        pcb_list[i].pid = -1;
+    }
 
     threadCount = 0;
     BackgroundPeriodicTask1 = NULL;
@@ -369,6 +374,7 @@ OS_AddThreadFull(void
     // populate TCB entry
     tcbPtr->id = id_counter++;         // id is unique, monotonically generated
     tcbPtr->stack_pointer = (uintptr_t) &stackPtr[stackSize - 16];
+		tcbPtr->stack_head_pointer = (uintptr_t) stackPtr;
     tcbPtr->sleep_state = 0;
     tcbPtr->blocked_state = 0;
     tcbPtr->priority = priority;
@@ -728,8 +734,8 @@ OS_Kill(void) {
     RunPt->id = -1;
     RunPt->blocked_state = 1;
 	
-	// TODO: 
 	  // free stack
+		Heap_Free((uint8_t *) RunPt->stack_head_pointer);
 	
 		// If part of process and is the last thread, 
 	  // free heap that is allocated to the process

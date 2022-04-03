@@ -39,7 +39,7 @@ typedef PCB_t *PCBPtr;
 
 // Lecture 3 Slide 16
 typedef struct TCB {
-    uintptr_t stack_pointer;
+    uintptr_t stack_pointer, stack_head_pointer;
     struct TCB *TCB_previous, *TCB_next;
     int id;
     long sleep_state;
