@@ -25,6 +25,17 @@
 #define TIME_250US  (TIME_1MS/5)
 
 #define MAX_THREADS_COUNT 20
+#define MAX_PROCESSES_COUNT 10
+
+#define MIN_STACK_SIZE 64
+
+typedef struct PCB {
+		uintptr_t text;
+		uintptr_t data;
+		int pid;
+		int threads;
+} PCB_t;
+typedef PCB_t *PCBPtr;
 
 // Lecture 3 Slide 16
 typedef struct TCB {
@@ -35,6 +46,7 @@ typedef struct TCB {
     int last_serviced;     // ms
     int priority;           // lab 3
     int blocked_state;   // lab 3
+    PCBPtr parent_process;
 } TCB_t;
 typedef TCB_t *TCBPtr;
 

@@ -38,7 +38,7 @@
 #define set16(array, index, value) (array[index] = (value) >> 8, array[index+1] = (value) & 0xFF)
 #define get16(array, index) ((array[index] << 8) | array[index+1])
 
-uint8_t heap[HEAP_SIZE];
+int heap[HEAP_SIZE];
 
 //******** Heap_Init *************** 
 // Initialize the Heap

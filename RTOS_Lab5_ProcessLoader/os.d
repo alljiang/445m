@@ -6,6 +6,7 @@
 .\os.o: ..\RTOS/OS.h
 .\os.o: ..\RTOS/ST7735.h
 .\os.o: ..\RTOS/UART0int.h
+.\os.o: ..\RTOS/heap.h
 .\os.o: ..\vware/tm4c123gh6pm.h
 .\os.o: ..\vware/CortexM.h
 .\os.o: ..\vware/PLL.h

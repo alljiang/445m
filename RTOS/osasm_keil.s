@@ -35,7 +35,7 @@ StartOS
     LDR SP, [R0, #0]			; SP <- RunPt.stack_pointer
     
     ; Restore registers
-    POP {R4-R11}
+	POP {R4-R11}
     POP {R0-R3}
     POP {R12}
 

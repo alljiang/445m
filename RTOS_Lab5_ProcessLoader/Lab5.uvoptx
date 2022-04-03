@@ -151,34 +151,18 @@
         <Bp>
           <Number>0</Number>
           <Type>0</Type>
-          <LineNumber>412</LineNumber>
+          <LineNumber>1090</LineNumber>
           <EnabledFlag>1</EnabledFlag>
-          <Address>4844</Address>
+          <Address>3198</Address>
           <ByteObject>0</ByteObject>
           <HtxType>0</HtxType>
           <ManyObjects>0</ManyObjects>
           <SizeOfObject>0</SizeOfObject>
           <BreakByAccess>0</BreakByAccess>
           <BreakIfRCount>1</BreakIfRCount>
-          <Filename>.\Lab5.c</Filename>
+          <Filename>..\RTOS\OS.c</Filename>
           <ExecCommand></ExecCommand>
-          <Expression>\\Lab5\Lab5.c\412</Expression>
-        </Bp>
-        <Bp>
-          <Number>1</Number>
-          <Type>0</Type>
-          <LineNumber>407</LineNumber>
-          <EnabledFlag>1</EnabledFlag>
-          <Address>4800</Address>
-          <ByteObject>0</ByteObject>
-          <HtxType>0</HtxType>
-          <ManyObjects>0</ManyObjects>
-          <SizeOfObject>0</SizeOfObject>
-          <BreakByAccess>0</BreakByAccess>
-          <BreakIfRCount>1</BreakIfRCount>
-          <Filename>.\Lab5.c</Filename>
-          <ExecCommand></ExecCommand>
-          <Expression>\\Lab5\Lab5.c\407</Expression>
+          <Expression>\\Lab5\../RTOS/OS.c\1090</Expression>
         </Bp>
       </Breakpoint>
       <WatchWindow1>
@@ -198,6 +182,14 @@
           <ItemText>NextRunPt</ItemText>
         </Ww>
       </WatchWindow1>
+      <MemoryWindow1>
+        <Mm>
+          <WinNumber>1</WinNumber>
+          <SubType>1</SubType>
+          <ItemText>RunPt</ItemText>
+          <AccSizeX>0</AccSizeX>
+        </Mm>
+      </MemoryWindow1>
       <Tracepoint>
         <THDelay>0</THDelay>
       </Tracepoint>
@@ -277,7 +269,7 @@
       <GroupNumber>1</GroupNumber>
       <FileNumber>3</FileNumber>
       <FileType>1</FileType>
-      <tvExp>1</tvExp>
+      <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
       <PathWithFileName>..\RTOS\heap.c</PathWithFileName>
@@ -409,7 +401,7 @@
       <GroupNumber>1</GroupNumber>
       <FileNumber>14</FileNumber>
       <FileType>1</FileType>
-      <tvExp>0</tvExp>
+      <tvExp>1</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
       <PathWithFileName>..\vware\ADCT0ATrigger.c</PathWithFileName>

@@ -13,6 +13,7 @@
 #include <RTOS/OS.h>
 #include <RTOS/ST7735.h>
 #include <RTOS/UART0int.h>
+#include <RTOS/heap.h>
 #include "vware/tm4c123gh6pm.h"
 #include "vware/CortexM.h"
 #include "vware/PLL.h"
@@ -70,15 +71,15 @@ uint32_t period2 = TIME_1MS;
 
 uint64_t osTimeMs;
 int id_counter = 0;
+int pid_counter = 0;
 
-#define THREAD_STACK_SIZE 128
+PCB_t pcb_list[MAX_PROCESSES_COUNT];
+
 TCB_t tcb_list[MAX_THREADS_COUNT];
 TCBPtr RunPt;
 TCBPtr NextRunPt;
 
 int16_t threadCount;
-
-int32_t stack[MAX_THREADS_COUNT][THREAD_STACK_SIZE];
 
 int32_t os_fifo[OS_FIFO_SIZE];
 uintptr_t os_fifo_ptr_head;
@@ -320,12 +321,12 @@ exit:
 // In Lab 2, you can ignore both the stackSize and priority fields
 // In Lab 3, you can ignore the stackSize fields
 int
-OS_AddThread(void
-(*task)(void), uint32_t stackSize, uint32_t priority) {
+OS_AddThreadFull(void
+(*task)(void), uint32_t stackSize, uint32_t priority, PCBPtr process) {
     // put Lab 2 (and beyond) solution here
     int rv = 1;
-    int listIndex = -1;
     TCBPtr tcbPtr = NULL;
+		int *stackPtr;
 
     // CRITICAL SECTION
     uint32_t sr = StartCritical();
@@ -345,7 +346,6 @@ OS_AddThread(void
     // search for a dead TCB to recycle (find the first occurrence of id == -1)
     for (int i = 0; i < MAX_THREADS_COUNT; i++) {
         if (tcb_list[i].id == -1) {
-            listIndex = i;
             tcbPtr = &tcb_list[i];
             break;
         }
@@ -357,33 +357,49 @@ OS_AddThread(void
         rv = 0;
         goto exit;
     }
+		
+		// allocate the stack
+		if (stackSize < MIN_STACK_SIZE) stackSize = MIN_STACK_SIZE;
+		stackPtr = Heap_Malloc(stackSize);
+		if (stackPtr == NULL) {
+				rv = 0;
+				goto exit;
+		}
 
     // populate TCB entry
     tcbPtr->id = id_counter++;         // id is unique, monotonically generated
-    tcbPtr->stack_pointer =
-            (uintptr_t) &stack[listIndex][THREAD_STACK_SIZE - 16];
+    tcbPtr->stack_pointer = (uintptr_t) &stackPtr[stackSize - 16];
     tcbPtr->sleep_state = 0;
     tcbPtr->blocked_state = 0;
     tcbPtr->priority = priority;
     tcbPtr->last_serviced = -1;
 
     // initialize this newly generated task's stack
-    stack[listIndex][THREAD_STACK_SIZE - 1] = 0x01000000;                // PSR
-    stack[listIndex][THREAD_STACK_SIZE - 2] = (int32_t) task;             // PC
-    stack[listIndex][THREAD_STACK_SIZE - 3] = 0x14141414;             // R14/LR
-    stack[listIndex][THREAD_STACK_SIZE - 4] = 0x12121212;                // R12
-    stack[listIndex][THREAD_STACK_SIZE - 5] = 0x03030303;                 // R3
-    stack[listIndex][THREAD_STACK_SIZE - 6] = 0x02020202;                 // R2
-    stack[listIndex][THREAD_STACK_SIZE - 7] = 0x01010101;                 // R1
-    stack[listIndex][THREAD_STACK_SIZE - 8] = 0x00000000;                 // R0
-    stack[listIndex][THREAD_STACK_SIZE - 9] = 0x11001100;                // R11
-    stack[listIndex][THREAD_STACK_SIZE - 10] = 0x10001000;               // R10
-    stack[listIndex][THREAD_STACK_SIZE - 11] = 0x09090909;                // R9
-    stack[listIndex][THREAD_STACK_SIZE - 12] = 0x08080808;                // R8
-    stack[listIndex][THREAD_STACK_SIZE - 13] = 0x07070707;                // R7
-    stack[listIndex][THREAD_STACK_SIZE - 14] = 0x06060606;                // R6
-    stack[listIndex][THREAD_STACK_SIZE - 15] = 0x05050505;                // R5
-    stack[listIndex][THREAD_STACK_SIZE - 16] = 0x04040404;                // R4
+    stackPtr[stackSize - 1] = 0x01000000;                // PSR
+    stackPtr[stackSize - 2] = (int32_t) task;             // PC
+    stackPtr[stackSize - 3] = 0x14141414;             // R14/LR
+    stackPtr[stackSize - 4] = 0x12121212;                // R12
+    stackPtr[stackSize - 5] = 0x03030303;                 // R3
+    stackPtr[stackSize - 6] = 0x02020202;                 // R2
+    stackPtr[stackSize - 7] = 0x01010101;                 // R1
+    stackPtr[stackSize - 8] = 0x00000000;                 // R0
+    stackPtr[stackSize - 9] = 0x11001100;                // R11
+    stackPtr[stackSize - 10] = 0x10001000;               // R10
+    stackPtr[stackSize - 11] = 0x09090909;                // R9
+    stackPtr[stackSize - 12] = 0x08080808;                // R8
+    stackPtr[stackSize - 13] = 0x07070707;                // R7
+    stackPtr[stackSize - 14] = 0x06060606;                // R6
+    stackPtr[stackSize - 15] = 0x05050505;                // R5
+    stackPtr[stackSize - 16] = 0x04040404;                // R4
+		
+		if (process != NULL) {
+				// is part of a process
+				tcbPtr->parent_process = process;
+				process->threads++;
+			
+				// set R9 to static base
+				stackPtr[stackSize - 11] = process->data;
+		}
 
     threadCount++;
     if (RunPt == NULL || RunPt->id == -1) {
@@ -418,7 +434,13 @@ OS_AddThread(void
 
 exit:
     EndCritical(sr);
-    return rv; // replace this line with solution
+    return rv;
+}
+
+int
+OS_AddThread(void
+(*task)(void), uint32_t stackSize, uint32_t priority) {
+		return OS_AddThreadFull(task, stackSize, priority, NULL);
 }
 
 void
@@ -447,9 +469,42 @@ int
 OS_AddProcess(void
 (*entry)(void), void *text, void *data, unsigned long stackSize,
         unsigned long priority) {
-    // put Lab 5 solution here
+		int rv = 1;
+		PCBPtr pcbPtr = NULL;
+					
+    uint32_t sr = StartCritical();
 
-    return 0; // replace this line with Lab 5 solution
+    if (entry == NULL || text == NULL || data == NULL) {
+        // invalid inputs
+        rv = 0;
+        goto exit;
+    }
+		
+    // search for a dead PCB to recycle (find the first occurrence of pid == -1)
+    for (int i = 0; i < MAX_PROCESSES_COUNT; i++) {
+        if (pcb_list[i].pid == -1) {
+            pcbPtr = &pcb_list[i];
+            break;
+        }
+    }
+		
+    if (pcbPtr == NULL) {
+        // no dead PCBs available, too many active processes
+        // increase MAX_PROCESSES_COUNT
+        rv = 0;
+        goto exit;
+    }
+		
+		pcbPtr->pid = pid_counter++;
+		pcbPtr->text = (uintptr_t) text;
+		pcbPtr->data = (uintptr_t) data;
+		pcbPtr->threads = 0;
+		
+		OS_AddThreadFull(entry, 128, priority, pcbPtr);
+
+exit:
+    EndCritical(sr);
+    return rv;
 }
 
 //******** OS_Id *************** 
@@ -672,6 +727,25 @@ OS_Kill(void) {
     // Deactivate RunPt's ID to indicate death
     RunPt->id = -1;
     RunPt->blocked_state = 1;
+	
+	// TODO: 
+	  // free stack
+	
+		// If part of process and is the last thread, 
+	  // free heap that is allocated to the process
+		PCBPtr process = RunPt->parent_process;
+		if (process != NULL) {
+				process->threads--;
+				if (process->threads == 0) {
+						// mark as dead
+						process->pid = -1;
+					
+						// free stuff
+						Heap_Free((uint8_t *) process->data);
+						Heap_Free((uint8_t *) process->text);
+						
+				}
+		}
 
     // Reschedule and unlink from active list
     OS_Suspend();
@@ -1014,14 +1088,8 @@ OS_Scheduler() {
     }
 
     NextRunPt->last_serviced = OS_MsTime();
-
-    // verification test
-    if (NextRunPt->id == 2) {
-        volatile int safdfsad = 1;
-    }
-
+		
 exit:
-
     return;
 }
 

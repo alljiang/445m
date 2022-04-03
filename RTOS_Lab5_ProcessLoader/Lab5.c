@@ -43,6 +43,7 @@
 #include "utils/uart-utils.h"
 #include "drivers/gpio.h"
 #include "drivers/launchpad.h"
+#include "loader.h"
 
 
 uint32_t NumCreated;   // number of foreground threads created
@@ -83,6 +84,27 @@ void ButtonWork(void){  heap_stats_t heap;
   ST7735_Message(1,3,"Heap waste =",heap.size - heap.used - heap.free);
   PD1 ^= 0x02;
   OS_Kill();  // done, OS does not return from a Kill
+} 
+
+static const ELFSymbol_t symtab[] = {
+		{ "ST7735_Message", ST7735_Message } // address of ST7735_Message
+}; 
+int LoadProgram(char *filename) {
+		int rv = 0;
+		ELFEnv_t env = {symtab, 1};
+	
+		rv = exec_elf(filename, &env);
+	
+		if (rv != 0) {
+				UART_OutStringNonBlock("exec_elf Error\n\r");
+		}
+		
+		return rv;
+}
+
+void ButtonWork2(void){
+		LoadProgram("User.axf");
+		OS_Kill();  // done, OS does not return from a Kill
 } 
 
 //************SW1Push*************
@@ -296,8 +318,8 @@ int Testmain0(void){  // Testmain0
   OS_Init();          // initialize, disable interrupts
   PortD_Init();       // profile user threads
   NumCreated = 0 ;
-  NumCreated += OS_AddThread(&Thread1,128,1); 
-  NumCreated += OS_AddThread(&Thread2,128,2); 
+  NumCreated += OS_AddThread(&Thread1,128,3); 
+  NumCreated += OS_AddThread(&Thread2,128,3); 
   NumCreated += OS_AddThread(&Thread3,128,3); 
   // Count1 Count2 Count3 should be equal or off by one at all times
   OS_Launch(TIME_2MS); // doesn't return, interrupts enabled in here
@@ -617,7 +639,11 @@ int main(void) { 			// main
 	Launchpad_PortFInitialize();
 	ST7735_InitR(INITR_GREENTAB);             // LCD initialization
 	UART_Init();                              // serial I/O for interpreter
+	Heap_Init();
 	
-	TestHeap();
-//  realmain();
+	Testmain0();
+	//Testmain1();
+	//Testmain2();
+	//Testmain3();
+  //realmain();
 }

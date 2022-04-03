@@ -18,3 +18,4 @@
 .\lab5.o: ..\utils/uart-utils.h
 .\lab5.o: ..\drivers/gpio.h
 .\lab5.o: ..\drivers/launchpad.h
+.\lab5.o: loader.h
