@@ -1,6 +1,6 @@
 Dependencies for Project 'Lab5', Target 'Lab5': (DO NOT MODIFY !)
 CompilerVersion: 5060960::V5.06 update 7 (build 960)::.\ARMCC
-F (.\Lab5.c)(0x624A1888)(--c99 -c --cpu Cortex-M4 -D__EVAL -D__MICROLIB -g -O0 --apcs=interwork --split_sections --signed_chars -I .. -I ..\..\.. -I ..\..\lab-I.\RTE\_Lab5-IC:\Users\Allen\AppData\Local\Arm\Packs\Keil\TM4C_DFP\1.1.0\Device\Include\TM4C123-D__UVISION_VERSION="536" -D_RTE_ -DTM4C123GH6PM -D_RTE_ -Drvmdk -DPART_LM4F120H5QR -DLAB5-o .\lab5.o --omf_browse .\lab5.crf --depend .\lab5.d)
+F (.\Lab5.c)(0x624A3DCE)(--c99 -c --cpu Cortex-M4 -D__EVAL -D__MICROLIB -g -O0 --apcs=interwork --split_sections --signed_chars -I .. -I ..\..\.. -I ..\..\lab-I.\RTE\_Lab5-IC:\Users\Allen\AppData\Local\Arm\Packs\Keil\TM4C_DFP\1.1.0\Device\Include\TM4C123-D__UVISION_VERSION="536" -D_RTE_ -DTM4C123GH6PM -D_RTE_ -Drvmdk -DPART_LM4F120H5QR -DLAB5-o .\lab5.o --omf_browse .\lab5.crf --depend .\lab5.d)
 I (C:\Keil_v5\ARM\ARMCC\include\stdint.h)(0x6025E85E)
 I (C:\Keil_v5\ARM\ARMCC\include\stdio.h)(0x6025E854)
 I (..\vware/tm4c123gh6pm.h)(0x620C4DA6)
@@ -48,7 +48,7 @@ I (..\vware/ADCT0ATrigger.h)(0x620C4DA5)
 I (..\vware/ADCSWTrigger.h)(0x620C4DA5)
 I (..\utils/str-utils.h)(0x620C4DA5)
 I (..\utils/uart-utils.h)(0x620C4DA5)
-F (..\RTOS\OS.c)(0x624A25EC)(--c99 -c --cpu Cortex-M4 -D__EVAL -D__MICROLIB -g -O0 --apcs=interwork --split_sections --signed_chars -I .. -I ..\..\.. -I ..\..\lab-I.\RTE\_Lab5-IC:\Users\Allen\AppData\Local\Arm\Packs\Keil\TM4C_DFP\1.1.0\Device\Include\TM4C123-D__UVISION_VERSION="536" -D_RTE_ -DTM4C123GH6PM -D_RTE_ -Drvmdk -DPART_LM4F120H5QR -DLAB5-o .\os.o --omf_browse .\os.crf --depend .\os.d)
+F (..\RTOS\OS.c)(0x624A3880)(--c99 -c --cpu Cortex-M4 -D__EVAL -D__MICROLIB -g -O0 --apcs=interwork --split_sections --signed_chars -I .. -I ..\..\.. -I ..\..\lab-I.\RTE\_Lab5-IC:\Users\Allen\AppData\Local\Arm\Packs\Keil\TM4C_DFP\1.1.0\Device\Include\TM4C123-D__UVISION_VERSION="536" -D_RTE_ -DTM4C123GH6PM -D_RTE_ -Drvmdk -DPART_LM4F120H5QR -DLAB5-o .\os.o --omf_browse .\os.crf --depend .\os.d)
 I (C:\Keil_v5\ARM\ARMCC\include\stdint.h)(0x6025E85E)
 I (C:\Keil_v5\ARM\ARMCC\include\stdbool.h)(0x6025E85C)
 I (C:\Keil_v5\ARM\ARMCC\include\stdio.h)(0x6025E854)
@@ -95,7 +95,7 @@ I (C:\Keil_v5\ARM\ARMCC\include\stdint.h)(0x6025E85E)
 I (C:\Keil_v5\ARM\ARMCC\include\stdbool.h)(0x6025E85C)
 I (..\RTOS/UART0int.h)(0x620C4DB6)
 F (.\startup.s)(0x624220E6)(--cpu Cortex-M4 --pd "__EVAL SETA 1" -g --apcs=interwork --pd "__MICROLIB SETA 1"-I.\RTE\_Lab5-IC:\Users\Allen\AppData\Local\Arm\Packs\Keil\TM4C_DFP\1.1.0\Device\Include\TM4C123--pd "__UVISION_VERSION SETA 536" --pd "_RTE_ SETA 1" --pd "TM4C123GH6PM SETA 1" --pd "_RTE_ SETA 1"--list .\startup.lst --xref -o .\startup.o --depend .\startup.d)
-F (..\RTOS\osasm_keil.s)(0x62490FB2)(--cpu Cortex-M4 --pd "__EVAL SETA 1" -g --apcs=interwork --pd "__MICROLIB SETA 1"-I.\RTE\_Lab5-IC:\Users\Allen\AppData\Local\Arm\Packs\Keil\TM4C_DFP\1.1.0\Device\Include\TM4C123--pd "__UVISION_VERSION SETA 536" --pd "_RTE_ SETA 1" --pd "TM4C123GH6PM SETA 1" --pd "_RTE_ SETA 1"--list .\osasm_keil.lst --xref -o .\osasm_keil.o --depend .\osasm_keil.d)
+F (..\RTOS\osasm_keil.s)(0x624A3D9E)(--cpu Cortex-M4 --pd "__EVAL SETA 1" -g --apcs=interwork --pd "__MICROLIB SETA 1"-I.\RTE\_Lab5-IC:\Users\Allen\AppData\Local\Arm\Packs\Keil\TM4C_DFP\1.1.0\Device\Include\TM4C123--pd "__UVISION_VERSION SETA 536" --pd "_RTE_ SETA 1" --pd "TM4C123GH6PM SETA 1" --pd "_RTE_ SETA 1"--list .\osasm_keil.lst --xref -o .\osasm_keil.o --depend .\osasm_keil.d)
 F (..\vware\PLL.c)(0x620C4DA5)(--c99 -c --cpu Cortex-M4 -D__EVAL -D__MICROLIB -g -O0 --apcs=interwork --split_sections --signed_chars -I .. -I ..\..\.. -I ..\..\lab-I.\RTE\_Lab5-IC:\Users\Allen\AppData\Local\Arm\Packs\Keil\TM4C_DFP\1.1.0\Device\Include\TM4C123-D__UVISION_VERSION="536" -D_RTE_ -DTM4C123GH6PM -D_RTE_ -Drvmdk -DPART_LM4F120H5QR -DLAB5-o .\pll.o --omf_browse .\pll.crf --depend .\pll.d)
 I (C:\Keil_v5\ARM\ARMCC\include\stdint.h)(0x6025E85E)
 I (..\vware/PLL.h)(0x620C4DA5)

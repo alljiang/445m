@@ -147,14 +147,35 @@ PendSV_Handler
         IMPORT    OS_Sleep
         IMPORT    OS_Time
         IMPORT    OS_AddThread
+		IMPORT	  SVC_Handler_C
 
 SVC_Handler
 ; put your Lab 5 code here
+	LDR R0, [SP, #24]
+	LDRH R0, [R0, #-2]
+	BIC R0, #0xFF00
+	PUSH {LR}
 
+; get function pointer
+	BL SVC_Handler_C
+	MOV R12, R0
 
-    BX      LR                   ; Return from exception
+; get parameters
+	POP {LR}
+	LDM SP,{R0-R3}
+	PUSH {LR}
+	
+; call function
+	LDR LR, =Function_Return
+	BX R12
 
-
+; store return value
+Function_Return
+	POP {LR}
+	STR R0, [SP]
+	
+    BX LR
+	
 
     ALIGN
     END

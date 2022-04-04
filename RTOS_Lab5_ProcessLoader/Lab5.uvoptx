@@ -151,34 +151,34 @@
         <Bp>
           <Number>0</Number>
           <Type>0</Type>
-          <LineNumber>516</LineNumber>
+          <LineNumber>177</LineNumber>
           <EnabledFlag>1</EnabledFlag>
-          <Address>8092</Address>
+          <Address>830</Address>
           <ByteObject>0</ByteObject>
           <HtxType>0</HtxType>
           <ManyObjects>0</ManyObjects>
           <SizeOfObject>0</SizeOfObject>
           <BreakByAccess>0</BreakByAccess>
           <BreakIfRCount>1</BreakIfRCount>
-          <Filename>.\Lab5.c</Filename>
+          <Filename>..\RTOS\osasm_keil.s</Filename>
           <ExecCommand></ExecCommand>
-          <Expression>\\Lab5\Lab5.c\516</Expression>
+          <Expression>\\Lab5\../RTOS/osasm_keil.s\177</Expression>
         </Bp>
         <Bp>
           <Number>1</Number>
           <Type>0</Type>
-          <LineNumber>738</LineNumber>
+          <LineNumber>178</LineNumber>
           <EnabledFlag>1</EnabledFlag>
-          <Address>4486</Address>
+          <Address>0</Address>
           <ByteObject>0</ByteObject>
           <HtxType>0</HtxType>
           <ManyObjects>0</ManyObjects>
           <SizeOfObject>0</SizeOfObject>
           <BreakByAccess>0</BreakByAccess>
-          <BreakIfRCount>1</BreakIfRCount>
-          <Filename>..\RTOS\OS.c</Filename>
+          <BreakIfRCount>0</BreakIfRCount>
+          <Filename>..\RTOS\osasm_keil.s</Filename>
           <ExecCommand></ExecCommand>
-          <Expression>\\Lab5\../RTOS/OS.c\738</Expression>
+          <Expression></Expression>
         </Bp>
       </Breakpoint>
       <WatchWindow1>
@@ -207,7 +207,7 @@
         <Mm>
           <WinNumber>1</WinNumber>
           <SubType>1</SubType>
-          <ItemText>0x20000A0F</ItemText>
+          <ItemText>SP</ItemText>
           <AccSizeX>0</AccSizeX>
         </Mm>
       </MemoryWindow1>
@@ -422,7 +422,7 @@
       <GroupNumber>1</GroupNumber>
       <FileNumber>14</FileNumber>
       <FileType>1</FileType>
-      <tvExp>1</tvExp>
+      <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
       <PathWithFileName>..\vware\ADCT0ATrigger.c</PathWithFileName>

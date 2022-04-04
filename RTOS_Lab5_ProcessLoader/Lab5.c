@@ -633,6 +633,7 @@ int Testmain3(void){   // Testmain3
 //*******************Trampoline for selecting main to execute**********
 int main(void) { 			// main
 	PLL_Init(Bus80MHz);
+	
 	GPIO_Initialize();
 	Launchpad_PortFInitialize();
 	ST7735_InitR(INITR_GREENTAB);             // LCD initialization
@@ -641,7 +642,7 @@ int main(void) { 			// main
 	
 	//Testmain0();
 	//Testmain1();
-	Testmain2();
+	//Testmain2();
 	//Testmain3();
   //realmain();
 }

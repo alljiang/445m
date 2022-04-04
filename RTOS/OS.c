@@ -1099,6 +1099,30 @@ exit:
     return;
 }
 
+// look up function
+void* SVC_Handler_C(uint8_t svcId) {
+		void* rv = 0;
+		switch (svcId) {
+			case 0:
+				rv = OS_Id;
+				break;
+			case 1:
+				rv = OS_Kill;
+				break;
+			case 2:
+				rv = OS_Sleep;
+				break;
+			case 3:
+				rv = OS_Time;
+				break;
+			case 4:
+				rv = OS_AddThread;
+				break;
+		}
+		
+		return rv;
+}
+
 //************** I/O Redirection *************** 
 // redirect terminal I/O to UART or file (Lab 4)
 /*
