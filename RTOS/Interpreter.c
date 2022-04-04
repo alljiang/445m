@@ -23,6 +23,7 @@
 #define EQ(a, b) (strcmp((a), (b)) == 0)
 
 volatile bool printed_Prompt;
+void ButtonWork2(void);
 
 const char help[] = "--------------------------\r\n"
         "Invalid command. Available commands:\r\n"
@@ -39,7 +40,7 @@ const char help[] = "--------------------------\r\n"
         "10) wclose - closes file from writing\r\n"
         "11) create <filename> - creates file\r\n"
         "12) wspam - writes 600 characters to open file\r\n"
-        "13) - \r\n"
+        "13) load - load User.axf\r\n"
         "14) - \r\n"
         "15) - \r\n"
         "16) - \r\n"
@@ -297,8 +298,8 @@ Interpreter_Parse(char *buffer) {
             }
         }
         if (rv == 0) UART_OutStringNonBlock((char*) msg_spam_success);
-    } else if (EQ("", token)) {
-
+    } else if (EQ("load", token)) {
+				OS_AddThread(&ButtonWork2,128,2);
     } else if (EQ("", token)) {
 
     } else if (EQ("", token)) {
