@@ -633,6 +633,7 @@ static int jumpTo(off_t ofs, void* text, void* data) {
 }
 
 int exec_elf(const char *path, const ELFEnv_t *env) {
+	
 #ifdef VALVANOWARE
   static ELFExec_t exec;  // avoid stack overflow on limited microcontroller
 #else

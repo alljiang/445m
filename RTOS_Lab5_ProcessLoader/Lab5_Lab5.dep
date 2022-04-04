@@ -1,6 +1,6 @@
 Dependencies for Project 'Lab5', Target 'Lab5': (DO NOT MODIFY !)
 CompilerVersion: 5060960::V5.06 update 7 (build 960)::.\ARMCC
-F (.\Lab5.c)(0x624A3DCE)(--c99 -c --cpu Cortex-M4 -D__EVAL -D__MICROLIB -g -O0 --apcs=interwork --split_sections --signed_chars -I .. -I ..\..\.. -I ..\..\lab-I.\RTE\_Lab5-IC:\Users\Allen\AppData\Local\Arm\Packs\Keil\TM4C_DFP\1.1.0\Device\Include\TM4C123-D__UVISION_VERSION="536" -D_RTE_ -DTM4C123GH6PM -D_RTE_ -Drvmdk -DPART_LM4F120H5QR -DLAB5-o .\lab5.o --omf_browse .\lab5.crf --depend .\lab5.d)
+F (.\Lab5.c)(0x624A4378)(--c99 -c --cpu Cortex-M4 -D__EVAL -D__MICROLIB -g -O0 --apcs=interwork --split_sections --signed_chars -I .. -I ..\..\.. -I ..\..\lab-I.\RTE\_Lab5-IC:\Users\Allen\AppData\Local\Arm\Packs\Keil\TM4C_DFP\1.1.0\Device\Include\TM4C123-D__UVISION_VERSION="536" -D_RTE_ -DTM4C123GH6PM -D_RTE_ -Drvmdk -DPART_LM4F120H5QR -DLAB5-o .\lab5.o --omf_browse .\lab5.crf --depend .\lab5.d)
 I (C:\Keil_v5\ARM\ARMCC\include\stdint.h)(0x6025E85E)
 I (C:\Keil_v5\ARM\ARMCC\include\stdio.h)(0x6025E854)
 I (..\vware/tm4c123gh6pm.h)(0x620C4DA6)
@@ -48,7 +48,7 @@ I (..\vware/ADCT0ATrigger.h)(0x620C4DA5)
 I (..\vware/ADCSWTrigger.h)(0x620C4DA5)
 I (..\utils/str-utils.h)(0x620C4DA5)
 I (..\utils/uart-utils.h)(0x620C4DA5)
-F (..\RTOS\OS.c)(0x624A3880)(--c99 -c --cpu Cortex-M4 -D__EVAL -D__MICROLIB -g -O0 --apcs=interwork --split_sections --signed_chars -I .. -I ..\..\.. -I ..\..\lab-I.\RTE\_Lab5-IC:\Users\Allen\AppData\Local\Arm\Packs\Keil\TM4C_DFP\1.1.0\Device\Include\TM4C123-D__UVISION_VERSION="536" -D_RTE_ -DTM4C123GH6PM -D_RTE_ -Drvmdk -DPART_LM4F120H5QR -DLAB5-o .\os.o --omf_browse .\os.crf --depend .\os.d)
+F (..\RTOS\OS.c)(0x624A9A2B)(--c99 -c --cpu Cortex-M4 -D__EVAL -D__MICROLIB -g -O0 --apcs=interwork --split_sections --signed_chars -I .. -I ..\..\.. -I ..\..\lab-I.\RTE\_Lab5-IC:\Users\Allen\AppData\Local\Arm\Packs\Keil\TM4C_DFP\1.1.0\Device\Include\TM4C123-D__UVISION_VERSION="536" -D_RTE_ -DTM4C123GH6PM -D_RTE_ -Drvmdk -DPART_LM4F120H5QR -DLAB5-o .\os.o --omf_browse .\os.crf --depend .\os.d)
 I (C:\Keil_v5\ARM\ARMCC\include\stdint.h)(0x6025E85E)
 I (C:\Keil_v5\ARM\ARMCC\include\stdbool.h)(0x6025E85C)
 I (C:\Keil_v5\ARM\ARMCC\include\stdio.h)(0x6025E854)
@@ -129,7 +129,7 @@ I (ff.h)(0x624220E5)
 I (integer.h)(0x624220E5)
 I (ffconf.h)(0x624220E5)
 I (../RTOS/eDisk.h)(0x620C4DB6)
-F (.\loader.c)(0x624220E6)(--c99 -c --cpu Cortex-M4 -D__EVAL -D__MICROLIB -g -O0 --apcs=interwork --split_sections --signed_chars -I .. -I ..\..\.. -I ..\..\lab-I.\RTE\_Lab5-IC:\Users\Allen\AppData\Local\Arm\Packs\Keil\TM4C_DFP\1.1.0\Device\Include\TM4C123-D__UVISION_VERSION="536" -D_RTE_ -DTM4C123GH6PM -D_RTE_ -Drvmdk -DPART_LM4F120H5QR -DLAB5-o .\loader.o --omf_browse .\loader.crf --depend .\loader.d)
+F (.\loader.c)(0x624A4A67)(--c99 -c --cpu Cortex-M4 -D__EVAL -D__MICROLIB -g -O0 --apcs=interwork --split_sections --signed_chars -I .. -I ..\..\.. -I ..\..\lab-I.\RTE\_Lab5-IC:\Users\Allen\AppData\Local\Arm\Packs\Keil\TM4C_DFP\1.1.0\Device\Include\TM4C123-D__UVISION_VERSION="536" -D_RTE_ -DTM4C123GH6PM -D_RTE_ -Drvmdk -DPART_LM4F120H5QR -DLAB5-o .\loader.o --omf_browse .\loader.crf --depend .\loader.d)
 I (loader.h)(0x624220E6)
 I (elf.h)(0x624220E5)
 I (C:\Keil_v5\ARM\ARMCC\include\stdint.h)(0x6025E85E)

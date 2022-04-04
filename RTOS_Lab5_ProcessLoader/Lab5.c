@@ -95,7 +95,7 @@ int LoadProgram(char *filename) {
 	
 		rv = exec_elf(filename, &env);
 	
-		if (rv != 0) {
+		if (rv == 0) {
 				UART_OutStringNonBlock("exec_elf Error\n\r");
 		}
 		
@@ -103,6 +103,7 @@ int LoadProgram(char *filename) {
 }
 
 void ButtonWork2(void){
+		UART_OutStringNonBlock("Loading User.axf\n\r");
 		LoadProgram("User.axf");
 		OS_Kill();  // done, OS does not return from a Kill
 } 
@@ -113,7 +114,7 @@ void ButtonWork2(void){
 // background threads execute once and return
 void SW1Push(void){
   if(OS_MsTime() > 20){ // debounce
-    if(OS_AddThread(&ButtonWork,100,2)){
+    if(OS_AddThread(&ButtonWork,128,2)){
       NumCreated++; 
     }
     OS_ClearMsTime();  // at least 20ms between touches
@@ -126,7 +127,7 @@ void SW1Push(void){
 // background threads execute once and return
 void SW2Push(void){
   if(OS_MsTime() > 20){ // debounce
-    if(OS_AddThread(&ButtonWork,100,2)){
+    if(OS_AddThread(&ButtonWork2,128,2)){
       NumCreated++; 
     }
     OS_ClearMsTime();  // at least 20ms between touches
@@ -160,6 +161,9 @@ int realmain(void){ // realmain
   // hardware init
   ADC_Init(0);  // sequencer 3, channel 0, PE3, sampling in Interpreter
   
+	eFile_Init();
+	eFile_Mount();
+	
   // attach background tasks
   OS_AddPeriodicThread(&disk_timerproc,TIME_1MS,0);   // time out routines for disk  
   OS_AddSW1Task(&SW1Push,2);
@@ -644,5 +648,5 @@ int main(void) { 			// main
 	//Testmain1();
 	//Testmain2();
 	//Testmain3();
-  //realmain();
+  realmain();
 }

@@ -4,8 +4,8 @@
 
 #include <stdio.h>
 #include <stdint.h>
-#include "inc/hw_types.h"
-#include "inc/tm4c123gh6pm.h"
+#include "vware/hw_types.h"
+#include "vware/tm4c123gh6pm.h"
 
 #include "OS.h"
 #include "Display.h"

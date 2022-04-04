@@ -398,7 +398,9 @@ OS_AddThreadFull(void
     stackPtr[stackSize - 15] = 0x05050505;                // R5
     stackPtr[stackSize - 16] = 0x04040404;                // R4
 		
-		if (process != NULL) {
+		if (RunPt == NULL) {
+				tcbPtr->parent_process = NULL;
+		} else if (process != NULL) {
 				// is part of a process
 				tcbPtr->parent_process = process;
 				process->threads++;
@@ -446,7 +448,9 @@ exit:
 int
 OS_AddThread(void
 (*task)(void), uint32_t stackSize, uint32_t priority) {
-		return OS_AddThreadFull(task, stackSize, priority, NULL);
+		PCBPtr process = RunPt->parent_process;
+		
+		return OS_AddThreadFull(task, stackSize, priority, process);
 }
 
 void
@@ -769,6 +773,10 @@ OS_Kill(void) {
 void
 OS_Suspend(void) {
     // put Lab 2 (and beyond) solution here
+		if (NextRunPt->id >= 3) {
+			volatile int asdf = 0;
+		}
+	
     NVIC_ST_CURRENT_R = 0;          // reset SysTick timer
     NVIC_INT_CTRL_R = set_bit_field_u32(NVIC_INT_CTRL_R, 26, 1, 1); // trigger SysTick handler
 }
