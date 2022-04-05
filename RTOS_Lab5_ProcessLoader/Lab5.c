@@ -88,7 +88,7 @@ void ButtonWork(void){  heap_stats_t heap;
 
 static const ELFSymbol_t symtab[] = {
 		{ "ST7735_Message", ST7735_Message } // address of ST7735_Message
-}; 
+};
 int LoadProgram(char *filename) {
 		int rv = 0;
 		ELFEnv_t env = {symtab, 1};
