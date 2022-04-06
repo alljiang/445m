@@ -30,7 +30,7 @@
 extern void Timer4A_Handler(void);
 extern void UART0_Handler(void);
 extern void PendSV_Handler(void);
-
+extern void CAN0_Handler(void);
 extern void ADC0Seq0_Handler(void);
 
 //*****************************************************************************
@@ -131,7 +131,7 @@ void (* const g_pfnVectors[])(void) =
     IntDefaultHandler,                      // Timer 3 subtimer B
     IntDefaultHandler,                      // I2C1 Master and Slave
     IntDefaultHandler,                      // Quadrature Encoder 1
-    IntDefaultHandler,                      // CAN0
+    CAN0_Handler,                           // CAN0
     IntDefaultHandler,                      // CAN1
     0,                                      // Reserved
     0,                                      // Reserved

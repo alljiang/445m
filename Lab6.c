@@ -43,6 +43,9 @@
 #include "RTOS/ST7735.h"
 #include "RTOS/can0.h"
 
+#include "drivers/gpio.h"
+#include "drivers/launchpad.h"
+
 // CAN IDs are set dynamically at time of CAN0_Open
 // Reverse on other microcontroller
 #define RCV_ID 2
@@ -233,6 +236,12 @@ Testmain1(void) {   // Testmain1
 //*******************Trampoline for selecting main to execute**********
 int
 main(void) { 			// main
+    PLL_Init(Bus80MHz);
+    GPIO_Initialize();
+    Launchpad_PortFInitialize();
+    ST7735_InitR(INITR_GREENTAB);             // LCD initialization
+    UART_Init();                              // serial I/O for interpreter
+
     Testmain1();
 //    realmain();
 }
