@@ -1,13 +1,13 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdbool.h>
-#include <utils.h>
 
 #include "vware/hw_memmap.h"
 #include "driverlib/gpio.h"
 #include "driverlib/pin_map.h"
 
 #include "RTOS/OS.h"
+#include "utils/utils.h"
 #include "vware/InterruptFunctions.h"
 #include "drivers/ping.h"
 
