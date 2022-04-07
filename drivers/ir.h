@@ -9,12 +9,15 @@
 #define DRIVERS_IR_H_
 
 #define IR0
-#define IR1
-#define IR2
-#define IR3
+//#define IR1
+//#define IR2
+//#define IR3
 
 void
 IR_Initialize(void);
+
+void
+IR_Sample(void);
 
 float
 IR_getDistance(uint8_t device);

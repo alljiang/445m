@@ -89,6 +89,8 @@ Ping_GetDistance(uint8_t sensor) {
         goto exit;
     }
 
+    DisableInterrupts();
+
     // drive pin high for 2-5 us
     GPIOPinTypeGPIOOutput(portBase, portPin);
     GPIOPinWrite(portBase, portPin, portPin);
@@ -96,8 +98,6 @@ Ping_GetDistance(uint8_t sensor) {
 
     // change to input
     GPIOPinTypeGPIOInput(portBase, portPin);
-
-    DisableInterrupts();
 
     // busy wait for input to go high, start counting
     while (GPIOPinRead(portBase, portPin) == 0);

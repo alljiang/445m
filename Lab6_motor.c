@@ -44,15 +44,13 @@
 #include "RTOS/ST7735.h"
 #include "RTOS/can0.h"
 
-#include "drivers/ping.h"
-#include "drivers/ir.h"
 #include "drivers/gpio.h"
 #include "drivers/launchpad.h"
 
 // CAN IDs are set dynamically at time of CAN0_Open
 // Reverse on other microcontroller
 #define RCV_ID 2
-#define XMT_ID 3
+#define XMT_ID 4
 
 //*********Prototype for PID in PID_stm32.s, STMicroelectronics
 short
@@ -85,116 +83,33 @@ PortD_Init(void) {
 }
 
 void
-AcquireOPT3101(void) {
-    uint32_t opt3101[3];
-    uint8_t packet[4];
+DriveMotors(void) {
+    /*
+     * Motor 1A: PB7
+     * Motor 1B: PB6
+     * Servo: PD0
+     */
 
-    OPT3101_Init(32);
-    OPT3101_Setup();
-    OPT3101_CalibrateInternalCrosstalk();
+    static int servoAngle = 90;
+    static int motorSpeed = 0;
 
-    while (1) {
-        for (int i = 0; i < 3; i++) {
-            OPT3101_StartMeasurementChannel(i);
-            OPT3101_ReadMeasurement();
-            while (!OPT3101_CheckDistanceSensor());
-            opt3101[i] = OPT3101_GetDistanceMillimeters() * 10; // units 0.01cm
+    servoAngle = 0;
+    motorSpeed = 1000;
 
-            packet[0] = 2 + i; // type OPT3101 (ch0: 2, ch1: 3, ch2: 4)
-            packet[1] = (opt3101[i] >> 16) & 0xFF;
-            packet[2] = (opt3101[i] >> 8) & 0xFF;
-            packet[3] = (opt3101[i] >> 0) & 0xFF;
+    Motors_Initialize();
+    Motor_setLeft(500);
+    Motor_setServoservo Angle);
 
-            CAN0_SendData(packet);
-        }
+    OS_Sleep(2000);
 
-        OS_Sleep(100);
-    }
-}
+    servoAngle = 0;
+    motorSpeed = 1000;
 
-void
-AcquireIR(void) {
-    int ir;
-    uint8_t packet[4];
+    Motors_Initialize();
+    Motor_setLeft(500);
+    Motor_setServoservo Angle);
 
-    IR_Initialize();
-
-    while (1) {
-        ir = IR_getDistance(0) * 100; // units 0.01cm
-
-        packet[0] = 1; // type IR
-        packet[1] = (ir >> 16) & 0xFF;
-        packet[2] = (ir >> 8) & 0xFF;
-        packet[3] = (ir >> 0) & 0xFF;
-
-        CAN0_SendData(packet);
-        OS_Sleep(100);
-    }
-}
-
-void
-AcquirePing(void) {
-    int ping;
-    uint8_t packet[4];
-
-    Ping_Initialize();
-
-    while (1) {
-        ping = Ping_GetDistance(0);
-
-        packet[0] = 0; // type ping
-        packet[1] = (ping >> 16) & 0xFF;
-        packet[2] = (ping >> 8) & 0xFF;
-        packet[3] = (ping >> 0) & 0xFF;
-
-        CAN0_SendData(packet);
-        OS_Sleep(100);
-    }
-}
-
-const char *str_ping = "Ping: ";
-const char *str_ir = "IR: ";
-const char *str_opt_0 = "OPT0: ";
-const char *str_opt_1 = "OPT1: ";
-const char *str_opt_2 = "OPT2: ";
-const char *str_error = "ERROR ";
-
-void
-CANHandler(void) {
-    uint8_t buffer[4];
-    int data;
-
-    while (1) {
-        // Suspend OS if mail not available
-        while (!CAN0_CheckMail()) {
-            OS_Suspend();
-        }
-
-        CAN0_GetMail(buffer);
-
-        data = (buffer[1] << 16) | (buffer[2] << 8) | buffer[3];
-
-        if (buffer[0] == 0) {
-            // ping
-            ST7735_Message(0, 1, (char*) str_ping, data);
-        } else if (buffer[0] == 1) {
-            // IR
-            ST7735_Message(0, 2, (char*) str_ir, data);
-        } else if (buffer[0] >= 2 && buffer[0] <= 4) {
-            // OPT3101
-            int channel = buffer[0] - 2;
-
-            if (channel == 0) {
-                ST7735_Message(0, 3, (char*) str_opt_0, data);
-            } else if (channel == 1) {
-                ST7735_Message(0, 4, (char*) str_opt_1, data);
-            } else if (channel == 2) {
-                ST7735_Message(0, 5, (char*) str_opt_2, data);
-            }
-        } else {
-            ST7735_Message(0, 7, (char*) str_error, 0);
-        }
-    }
+    OS_Kill();
 }
 
 void
@@ -210,7 +125,6 @@ Idle(void) {
 int
 realmain(void) { // realmain
     OS_Init();        // initialize, disable interrupts
-    OS_Fifo_Init(128);
     PortD_Init();     // debugging profile
     Heap_Init();      // initialize heap
     MaxJitter = 0;    // in 1us units
@@ -219,15 +133,11 @@ realmain(void) { // realmain
     ADC_Init(0);  // sequencer 3, channel 0, PE3, sampling in Interpreter
     CAN0_Open(RCV_ID, XMT_ID);
 
-    OS_AddPeriodicThread(&IR_Sample, 80000000 / 100, 2);   // 100 Hz
+    OS_AddSW1Task(&DriveMotors, 2);
 
     // create initial foreground threads
     NumCreated = 0;
     NumCreated += OS_AddThread(&Interpreter, 128, 2);
-    NumCreated += OS_AddThread(&CANHandler, 128, 2);
-    NumCreated += OS_AddThread(&AcquireOPT3101, 128, 2);
-    NumCreated += OS_AddThread(&AcquireIR, 128, 2);
-    NumCreated += OS_AddThread(&AcquirePing, 128, 2);
     NumCreated += OS_AddThread(&Idle, 128, 5);  // at lowest priority
 
     OS_Launch(TIME_2MS); // doesn't return, interrupts enabled in here
