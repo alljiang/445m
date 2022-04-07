@@ -82,6 +82,15 @@ PortD_Init(void) {
 }
 
 void
+AcquireData(void) {
+    OPT3101_Init();
+
+    while (1) {
+
+    }
+}
+
+void
 Idle(void) {
     IdleCount = 0;
     while (1) {

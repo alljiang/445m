@@ -91,6 +91,7 @@ Ping_GetDistance(uint8_t sensor) {
 
     // drive pin high for 2-5 us
     GPIOPinTypeGPIOOutput(portBase, portPin);
+    GPIOPinWrite(portBase, portPin, portPin);
     delayMicroseconds(3);
 
     // change to input
