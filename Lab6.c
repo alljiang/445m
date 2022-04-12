@@ -95,19 +95,24 @@ AcquireOPT3101(void) {
     uint32_t opt3101[3];
 
     while (1) {
-        for (int i = 0; i < 3; i++) {
-            OPT3101_StartMeasurementChannel(i);
+        int n = 3;
+        for (int i = 0; i < 3*n; i++) {
+            int channel = 0;
+            if (i >= n) channel = 1;
+            if (i >= 2*n) channel = 2;
+            OPT3101_StartMeasurementChannel(channel);
             while (!OPT3101_CheckDistanceSensor());
             OPT3101_ReadMeasurement();
-            opt3101[i] = OPT3101_GetDistanceMillimeters() * 10; // units 0.01cm
+            opt3101[channel] = OPT3101_GetDistanceMillimeters() * 10; // units 0.01cm
+            opt3101[channel] = opt3101[channel] * 1.0318 - 7483;
 
-            packet_opt3101[0] = 2 + i; // type OPT3101 (ch0: 2, ch1: 3, ch2: 4)
-            packet_opt3101[1] = (opt3101[i] >> 16) & 0xFF;
-            packet_opt3101[2] = (opt3101[i] >> 8) & 0xFF;
-            packet_opt3101[3] = (opt3101[i] >> 0) & 0xFF;
+            packet_opt3101[0] = 2 + channel; // type OPT3101 (ch0: 2, ch1: 3, ch2: 4)
+            packet_opt3101[1] = (opt3101[channel] >> 16) & 0xFF;
+            packet_opt3101[2] = (opt3101[channel] >> 8) & 0xFF;
+            packet_opt3101[3] = (opt3101[channel] >> 0) & 0xFF;
 
             CAN0_SendData(packet_opt3101);
-            OS_Sleep(100 / 3);
+            OS_Sleep(30);
         }
     }
 }

@@ -83,8 +83,8 @@ IR_Sample(void) {
             distance[device] = calculated;
         } else {
             // complementary filter
-            distance[device] = distance[device] * 0.9 + calculated * 0.1;
-            distance[device] = (distance[device] * 9 + calculated * 1) / 10;
+//            distance[device] = distance[device] * 0.9 + calculated * 0.1;
+            distance[device] = (distance[device] * 96 + calculated * 4) / 100;
         }
     }
 
@@ -94,5 +94,5 @@ IR_Sample(void) {
 // get distance in cm
 int
 IR_getDistance(uint8_t device) {
-    return distance[device];
+    return distance[device]*0.394 - 1342;
 }
