@@ -50,8 +50,8 @@
 
 // CAN IDs are set dynamically at time of CAN0_Open
 // Reverse on other microcontroller
-#define RCV_ID 2
-#define XMT_ID 4
+#define RCV_ID 3
+#define XMT_ID 2
 
 //*********Prototype for PID in PID_stm32.s, STMicroelectronics
 short
@@ -141,6 +141,15 @@ Idle(void) {
     }
 }
 
+void
+CANThread(void) {
+    uint8_t buffer[4];
+    while (1) {
+        CAN0_GetMail(buffer);
+        CAN0_SendData(buffer);
+    }
+}
+
 int
 realmain(void) { // realmain
     OS_Init();        // initialize, disable interrupts
@@ -155,6 +164,7 @@ realmain(void) { // realmain
     // create initial foreground threads
     NumCreated = 0;
     NumCreated += OS_AddThread(&Interpreter, 128, 2);
+    NumCreated += OS_AddThread(&CANThread, 128, 2);
     NumCreated += OS_AddThread(&DriveMotors, 128, 2);
     NumCreated += OS_AddThread(&Idle, 128, 5);  // at lowest priority
 

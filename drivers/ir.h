@@ -19,7 +19,7 @@ IR_Initialize(void);
 void
 IR_Sample(void);
 
-float
+int
 IR_getDistance(uint8_t device);
 
 #endif /* DRIVERS_IR_H_ */

@@ -65,6 +65,10 @@ short PrevError;   // previous error, RPM
 uint32_t NumCreated;   // number of foreground threads created
 uint32_t IdleCount;    // CPU idle counter
 
+uint8_t packet_opt3101[4];
+uint8_t packet_ir[4];
+uint8_t packet_hcsr04[4];
+
 //---------------------User debugging-----------------------
 extern int32_t MaxJitter;      // largest time jitter between interrupts in usec
 
@@ -89,43 +93,38 @@ PortD_Init(void) {
 void
 AcquireOPT3101(void) {
     uint32_t opt3101[3];
-    uint8_t packet[4];
 
     while (1) {
         for (int i = 0; i < 3; i++) {
             OPT3101_StartMeasurementChannel(i);
-            OPT3101_ReadMeasurement();
             while (!OPT3101_CheckDistanceSensor());
+            OPT3101_ReadMeasurement();
             opt3101[i] = OPT3101_GetDistanceMillimeters() * 10; // units 0.01cm
 
-            packet[0] = 2 + i; // type OPT3101 (ch0: 2, ch1: 3, ch2: 4)
-            packet[1] = (opt3101[i] >> 16) & 0xFF;
-            packet[2] = (opt3101[i] >> 8) & 0xFF;
-            packet[3] = (opt3101[i] >> 0) & 0xFF;
+            packet_opt3101[0] = 2 + i; // type OPT3101 (ch0: 2, ch1: 3, ch2: 4)
+            packet_opt3101[1] = (opt3101[i] >> 16) & 0xFF;
+            packet_opt3101[2] = (opt3101[i] >> 8) & 0xFF;
+            packet_opt3101[3] = (opt3101[i] >> 0) & 0xFF;
 
-//            CAN0_SendData(packet);
+            CAN0_SendData(packet_opt3101);
+            OS_Sleep(100 / 3);
         }
-
-        OS_Sleep(100);
     }
 }
 
 void
 AcquireIR(void) {
     int ir;
-    uint8_t packet[4];
-
-    IR_Initialize();
 
     while (1) {
-        ir = IR_getDistance(0) * 100; // units 0.01cm
+        ir = IR_getDistance(0); // units 0.01cm
 
-        packet[0] = 1; // type IR
-        packet[1] = (ir >> 16) & 0xFF;
-        packet[2] = (ir >> 8) & 0xFF;
-        packet[3] = (ir >> 0) & 0xFF;
+        packet_ir[0] = 1; // type IR
+        packet_ir[1] = (ir >> 16) & 0xFF;
+        packet_ir[2] = (ir >> 8) & 0xFF;
+        packet_ir[3] = (ir >> 0) & 0xFF;
 
-//        CAN0_SendData(packet);
+        CAN0_SendData(packet_ir);
         OS_Sleep(100);
     }
 }
@@ -133,22 +132,21 @@ AcquireIR(void) {
 void
 AcquireHCSR04(void) {
     int hcsr04;
-    uint8_t packet[4];
 
     while (1) {
         hcsr04 = HCSR04_GetDistance();
 
-        packet[0] = 0; // type ping
-        packet[1] = (hcsr04 >> 16) & 0xFF;
-        packet[2] = (hcsr04 >> 8) & 0xFF;
-        packet[3] = (hcsr04 >> 0) & 0xFF;
+        packet_hcsr04[0] = 0; // type hcsr04
+        packet_hcsr04[1] = (hcsr04 >> 16) & 0xFF;
+        packet_hcsr04[2] = (hcsr04 >> 8) & 0xFF;
+        packet_hcsr04[3] = (hcsr04 >> 0) & 0xFF;
 
-//        CAN0_SendData(packet);
-        OS_Sleep(100);
+        CAN0_SendData(packet_hcsr04);
+        OS_Sleep(80);
     }
 }
 
-const char *str_ping = "Ping: ";
+const char *str_hcsr04 = "HCSR04: ";
 const char *str_ir = "IR: ";
 const char *str_opt_0 = "OPT0: ";
 const char *str_opt_1 = "OPT1: ";
@@ -162,17 +160,13 @@ CANHandler(void) {
 
     while (1) {
         // Suspend OS if mail not available
-        while (!CAN0_CheckMail()) {
-            OS_Suspend();
-        }
-
         CAN0_GetMail(buffer);
 
         data = (buffer[1] << 16) | (buffer[2] << 8) | buffer[3];
 
         if (buffer[0] == 0) {
-            // ping
-            ST7735_Message(0, 1, (char*) str_ping, data);
+            // hcsr04
+            ST7735_Message(0, 1, (char*) str_hcsr04, data);
         } else if (buffer[0] == 1) {
             // IR
             ST7735_Message(0, 2, (char*) str_ir, data);
@@ -203,84 +197,34 @@ Idle(void) {
     }
 }
 
+void
+SampleIR(void) {
+    while (1) {
+        IR_Sample();
+        OS_Sleep(10);
+    }
+}
+
 int
 realmain(void) { // realmain
     OS_Init();        // initialize, disable interrupts
-    OS_Fifo_Init(128);
+//    OS_Fifo_Init(128);
     PortD_Init();     // debugging profile
-    Heap_Init();      // initialize heap
-    MaxJitter = 0;    // in 1us units
 
-    // hardware init
-    ADC_Init(0);  // sequencer 3, channel 0, PE3, sampling in Interpreter
     CAN0_Open(RCV_ID, XMT_ID);
 
-    OS_AddPeriodicThread(&IR_Sample, 80000000 / 100, 2);   // 100 Hz
     OS_AddPeriodicThread(&HCSR04_StartMeasurement, 80000000 / 20, 2);   // 20 Hz
 
     // create initial foreground threads
     NumCreated = 0;
     NumCreated += OS_AddThread(&Interpreter, 128, 2);
-//    NumCreated += OS_AddThread(&CANHandler, 128, 2);
-//    NumCreated += OS_AddThread(&AcquireOPT3101, 128, 2);
-//    NumCreated += OS_AddThread(&AcquireIR, 128, 2);
+    NumCreated += OS_AddThread(&CANHandler, 128, 2);
+    NumCreated += OS_AddThread(&AcquireOPT3101, 128, 2);
+    NumCreated += OS_AddThread(&AcquireIR, 128, 2);
     NumCreated += OS_AddThread(&AcquireHCSR04, 128, 2);
+    NumCreated += OS_AddThread(&SampleIR, 128, 2);
     NumCreated += OS_AddThread(&Idle, 128, 5);  // at lowest priority
 
-    OS_Launch(TIME_2MS); // doesn't return, interrupts enabled in here
-    return 0;            // this never executes
-}
-
-//+++++++++++++++++++++++++DEBUGGING CODE++++++++++++++++++++++++
-// ONCE YOUR RTOS WORKS YOU CAN COMMENT OUT THE REMAINING CODE
-// 
-
-//*****************Test project 0*************************
-// This is the simplest configuration, 
-// Just see if you can import your OS
-// no UART interrupts
-// no SYSTICK interrupts
-// no timer interrupts
-// no switch interrupts
-// no ADC serial port or LCD output
-// no calls to semaphores
-uint32_t Count1;   // number of times thread1 loops
-uint32_t Count2;   // number of times thread2 loops
-uint32_t Count3;   // number of times thread3 loops
-void
-Thread1(void) {
-    Count1 = 0;
-    for (;;) {
-        PD0 ^= 0x01;       // heartbeat
-        Count1++;
-    }
-}
-void
-Thread2(void) {
-    Count2 = 0;
-    for (;;) {
-        PD1 ^= 0x02;       // heartbeat
-        Count2++;
-    }
-}
-void
-Thread3(void) {
-    Count3 = 0;
-    for (;;) {
-        PD2 ^= 0x04;       // heartbeat
-        Count3++;
-    }
-}
-
-int
-Testmain0(void) {  // Testmain0
-    OS_Init();          // initialize, disable interrupts
-    PortD_Init();       // profile user threads
-    NumCreated = 0;
-    NumCreated += OS_AddThread(&Thread1, 128, 1);
-    NumCreated += OS_AddThread(&Thread2, 128, 2);
-    NumCreated += OS_AddThread(&Thread3, 128, 3);
-    // Count1 Count2 Count3 should be equal or off by one at all times
     OS_Launch(TIME_2MS); // doesn't return, interrupts enabled in here
     return 0;            // this never executes
 }
@@ -310,8 +254,8 @@ CANReceiveTask(void) {
         CAN0_GetMail(RcvData);
         RcvCount++;
         ST7735_Message(1, 0, "RcvCount   = ", RcvCount);
-        ST7735_Message(1, 0, "RcvData[0] = ", RcvData[0]);
-        ST7735_Message(1, 0, "RcvData[1] = ", RcvData[1]);
+        ST7735_Message(1, 1, "RcvData[0] = ", RcvData[0]);
+        ST7735_Message(1, 2, "RcvData[1] = ", RcvData[1]);
     }
 }
 
@@ -363,8 +307,10 @@ main(void) { 			// main
     UART_Init();                              // serial I/O for interpreter
     HCSR04_Initialize();
 
+    IR_Initialize();
+
     I2C0_Init(400000, 80000000);
-    OPT3101_Init(32);
+    OPT3101_Init(5);
     OPT3101_Setup();
     OPT3101_CalibrateInternalCrosstalk();
 
