@@ -36,6 +36,7 @@
 #include "vware/PLL.h"
 #include "vware/LPF.h"
 #include "vware/opt3101.h"
+#include "vware/I2CB1.h"
 #include "RTOS/UART0int.h"
 #include "RTOS/ADC.h"
 #include "RTOS/OS.h"
@@ -48,6 +49,7 @@
 #include "drivers/ir.h"
 #include "drivers/gpio.h"
 #include "drivers/launchpad.h"
+#include "drivers/hcsr04.h"
 
 // CAN IDs are set dynamically at time of CAN0_Open
 // Reverse on other microcontroller
@@ -89,10 +91,6 @@ AcquireOPT3101(void) {
     uint32_t opt3101[3];
     uint8_t packet[4];
 
-    OPT3101_Init(32);
-    OPT3101_Setup();
-    OPT3101_CalibrateInternalCrosstalk();
-
     while (1) {
         for (int i = 0; i < 3; i++) {
             OPT3101_StartMeasurementChannel(i);
@@ -105,7 +103,7 @@ AcquireOPT3101(void) {
             packet[2] = (opt3101[i] >> 8) & 0xFF;
             packet[3] = (opt3101[i] >> 0) & 0xFF;
 
-            CAN0_SendData(packet);
+//            CAN0_SendData(packet);
         }
 
         OS_Sleep(100);
@@ -127,27 +125,25 @@ AcquireIR(void) {
         packet[2] = (ir >> 8) & 0xFF;
         packet[3] = (ir >> 0) & 0xFF;
 
-        CAN0_SendData(packet);
+//        CAN0_SendData(packet);
         OS_Sleep(100);
     }
 }
 
 void
-AcquirePing(void) {
-    int ping;
+AcquireHCSR04(void) {
+    int hcsr04;
     uint8_t packet[4];
 
-    Ping_Initialize();
-
     while (1) {
-        ping = Ping_GetDistance(0);
+        hcsr04 = HCSR04_GetDistance();
 
         packet[0] = 0; // type ping
-        packet[1] = (ping >> 16) & 0xFF;
-        packet[2] = (ping >> 8) & 0xFF;
-        packet[3] = (ping >> 0) & 0xFF;
+        packet[1] = (hcsr04 >> 16) & 0xFF;
+        packet[2] = (hcsr04 >> 8) & 0xFF;
+        packet[3] = (hcsr04 >> 0) & 0xFF;
 
-        CAN0_SendData(packet);
+//        CAN0_SendData(packet);
         OS_Sleep(100);
     }
 }
@@ -220,14 +216,15 @@ realmain(void) { // realmain
     CAN0_Open(RCV_ID, XMT_ID);
 
     OS_AddPeriodicThread(&IR_Sample, 80000000 / 100, 2);   // 100 Hz
+    OS_AddPeriodicThread(&HCSR04_StartMeasurement, 80000000 / 20, 2);   // 20 Hz
 
     // create initial foreground threads
     NumCreated = 0;
     NumCreated += OS_AddThread(&Interpreter, 128, 2);
-    NumCreated += OS_AddThread(&CANHandler, 128, 2);
-    NumCreated += OS_AddThread(&AcquireOPT3101, 128, 2);
-    NumCreated += OS_AddThread(&AcquireIR, 128, 2);
-    NumCreated += OS_AddThread(&AcquirePing, 128, 2);
+//    NumCreated += OS_AddThread(&CANHandler, 128, 2);
+//    NumCreated += OS_AddThread(&AcquireOPT3101, 128, 2);
+//    NumCreated += OS_AddThread(&AcquireIR, 128, 2);
+    NumCreated += OS_AddThread(&AcquireHCSR04, 128, 2);
     NumCreated += OS_AddThread(&Idle, 128, 5);  // at lowest priority
 
     OS_Launch(TIME_2MS); // doesn't return, interrupts enabled in here
@@ -364,7 +361,13 @@ main(void) { 			// main
     Launchpad_PortFInitialize();
     ST7735_InitR(INITR_GREENTAB);             // LCD initialization
     UART_Init();                              // serial I/O for interpreter
+    HCSR04_Initialize();
 
-    Testmain1();
-//    realmain();
+    I2C0_Init(400000, 80000000);
+    OPT3101_Init(32);
+    OPT3101_Setup();
+    OPT3101_CalibrateInternalCrosstalk();
+
+//    Testmain1();
+    realmain();
 }

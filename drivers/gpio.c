@@ -11,12 +11,19 @@
 
 #include "gpio.h"
 
+extern void HCSR04_InterruptHandler(void);
+
 void
 GPIO_PortAHandler(void) {
 }
 
 void
 GPIO_PortBHandler(void) {
+    if (GPIO_PORTB_RIS_R & (1u << 6u)) {
+        // PB6
+        GPIO_ClearInterruptStatus(PORT_B, 6);
+        HCSR04_InterruptHandler();
+    }
 }
 
 void
@@ -51,7 +58,7 @@ GPIO_Initialize(void) {
 void
 GPIO_EnableEdgeInterrupt(enum Port port, uint8_t pinNum,
         enum EdgeEvent risingEdge, uint8_t priority) {
-    if(priority > 7) {
+    if (priority > 7) {
         goto exit;
     }
 
@@ -170,18 +177,19 @@ exit:
 
 }
 
-void GPIO_ClearInterruptStatus(enum Port port, uint8_t pinNum) {
+void
+GPIO_ClearInterruptStatus(enum Port port, uint8_t pinNum) {
     if (port == PORT_A) {
         GPIO_PORTA_ICR_R = set_bit_field_u32(GPIO_PORTA_ICR_R, pinNum, 1, 1);
-    } else if(port == PORT_B) {
+    } else if (port == PORT_B) {
         GPIO_PORTB_ICR_R = set_bit_field_u32(GPIO_PORTB_ICR_R, pinNum, 1, 1);
-    } else if(port == PORT_C) {
+    } else if (port == PORT_C) {
         GPIO_PORTC_ICR_R = set_bit_field_u32(GPIO_PORTC_ICR_R, pinNum, 1, 1);
-    } else if(port == PORT_D) {
+    } else if (port == PORT_D) {
         GPIO_PORTD_ICR_R = set_bit_field_u32(GPIO_PORTD_ICR_R, pinNum, 1, 1);
-    } else if(port == PORT_E) {
+    } else if (port == PORT_E) {
         GPIO_PORTE_ICR_R = set_bit_field_u32(GPIO_PORTE_ICR_R, pinNum, 1, 1);
-    } else if(port == PORT_F) {
+    } else if (port == PORT_F) {
         GPIO_PORTF_ICR_R = set_bit_field_u32(GPIO_PORTF_ICR_R, pinNum, 1, 1);
     }
 

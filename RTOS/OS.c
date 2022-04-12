@@ -964,7 +964,7 @@ OS_Scheduler() {
     }
 
     //  The priority head should just be RunPt if RunPt already has the highest priority
-    if (priorityHead->priority == RunPt->priority) {
+    if (priorityHead->priority == RunPt->priority && (RunPt->TCB_next != RunPt && RunPt->TCB_next->priority == RunPt->priority)) {
         priorityHead = RunPt;
     }
 

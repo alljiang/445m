@@ -14,21 +14,21 @@
 
 /*
  * Motor L
- *  A: PB7          M0PWM1
- *  B: PB6          M0PWM0
+ *  A: PB7          M0PWM1 Gen0
+ *  B: PB6          M0PWM0 Gen0
  *
  * Motor R
- *  A: PB5          M0PWM3
- *  B: PB4          M0PWM2
+ *  A: PB5          M0PWM3 Gen1
+ *  B: PB4          M0PWM2 Gen1
  *
- * Servo A: PD0     M0PWM6
- * Servo B: PD1     M0PWM7   NOT IMPLEMENTED
+ * Servo A: PD0     M0PWM6 Gen3
+ * Servo B: PD1     M0PWM7 Gen3   NOT IMPLEMENTED
  */
 
 void
-Motors_Initialize() {
+Motor_Initialize() {
     // Initialize PWM
-    SysCtlPWMClockSet(SYSCTL_PWMDIV_1);
+    SysCtlPWMClockSet(SYSCTL_PWMDIV_32);
 
     SysCtlPeripheralEnable(SYSCTL_PERIPH_PWM0);
     while (!SysCtlPeripheralReady(SYSCTL_PERIPH_PWM0)) {
@@ -55,7 +55,7 @@ Motors_Initialize() {
 
     Motor_setLeft(0);
     Motor_setRight(0);
-    Servo_setAngle(90);
+    Motor_setServo(90);
 
     PWMOutputState(PWM0_BASE,
             PWM_OUT_0_BIT | PWM_OUT_1_BIT | PWM_OUT_2_BIT | PWM_OUT_3_BIT
@@ -73,7 +73,8 @@ Motor_setLeft(int speed) {
     speedMagnitude = speed;
     if (speedMagnitude < 0) speedMagnitude = -speedMagnitude;
 
-    speedPeriod = speed * 10;
+    speedPeriod = speedMagnitude * 10;
+    speedPeriod = 10000 - speedPeriod;
 
     PWMGenConfigure(PWM0_BASE, PWM_GEN_0,
     PWM_GEN_MODE_DOWN | PWM_GEN_MODE_NO_SYNC);
@@ -86,9 +87,12 @@ Motor_setLeft(int speed) {
         PWMPulseWidthSet(PWM0_BASE, PWM_OUT_1, 0);
         PWMPulseWidthSet(PWM0_BASE, PWM_OUT_0, speedPeriod);
     }
-
     PWMGenEnable(PWM0_BASE, PWM_GEN_0);
 
+    PWMOutputState(PWM0_BASE,
+    PWM_OUT_0_BIT | PWM_OUT_1_BIT | PWM_OUT_2_BIT | PWM_OUT_3_BIT, true);
+    PWMOutputState(PWM0_BASE,
+    PWM_OUT_6_BIT | PWM_OUT_7_BIT, false);
 exit:
     return;
 }
@@ -100,11 +104,11 @@ Motor_setRight(int speed) {
 
     if (speed < -1000 || speed > 1000) goto exit;
 
-    genPeriod = 10000;      // clock ticks
+    genPeriod = 312;      // clock ticks
     speedMagnitude = -speed;   // flip since on other side
     if (speedMagnitude < 0) speedMagnitude = -speedMagnitude;
 
-    speedPeriod = speed * 10;
+    speedPeriod = speed * genPeriod / 1000;
 
     PWMGenConfigure(PWM0_BASE, PWM_GEN_1,
     PWM_GEN_MODE_DOWN | PWM_GEN_MODE_NO_SYNC);
@@ -131,16 +135,20 @@ Motor_setServo(int angle) {
 
     if (angle < 0 || angle > 180) goto exit;
 
-    genPeriod = 80000 * 20;      // clock ticks, 20ms
-    sendPeriod = map(angle, 0, 180, 40000, 200000, 1);
+    genPeriod = 50000;      // clock ticks, 20ms
+    sendPeriod = map(angle, 0, 180, genPeriod / 20, genPeriod / 10, 1);
 
-    PWMGenConfigure(PWM0_BASE, PWM_GEN_2,
+    PWMGenConfigure(PWM0_BASE, PWM_GEN_3,
     PWM_GEN_MODE_DOWN | PWM_GEN_MODE_NO_SYNC);
-    PWMGenPeriodSet(PWM0_BASE, PWM_GEN_2, genPeriod);
+    PWMGenPeriodSet(PWM0_BASE, PWM_GEN_3, genPeriod);
 
     PWMPulseWidthSet(PWM0_BASE, PWM_OUT_6, sendPeriod);
 
-    PWMGenEnable(PWM0_BASE, PWM_GEN_2);
+    PWMGenEnable(PWM0_BASE, PWM_GEN_3);
+
+    PWMOutputState(PWM0_BASE,
+    PWM_OUT_0_BIT | PWM_OUT_1_BIT | PWM_OUT_2_BIT | PWM_OUT_3_BIT, false);
+    PWMOutputState(PWM0_BASE, PWM_OUT_6_BIT | PWM_OUT_7_BIT, true);
 
 exit:
     return;

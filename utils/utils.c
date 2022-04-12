@@ -7,16 +7,9 @@ delayMicroseconds(int microseconds) {
     unsigned static long LastTime;
     uint32_t thisTime;
 
-    microseconds *= 10; // change to units of 0.1 us
-
-    while (microseconds > 0) {
-        thisTime = OS_Time();       // current time, 12.5ns
-
-        uint32_t diff = OS_TimeDifference(LastTime, thisTime); // units of 0.1 us
-        microseconds -= diff;
-
-        LastTime = thisTime;
-    }
+   for (int i = 0; i < microseconds * 6; i++) {
+       volatile int waste = 0;
+   }
 }
 
 long

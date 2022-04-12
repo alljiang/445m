@@ -46,6 +46,7 @@
 
 #include "drivers/gpio.h"
 #include "drivers/launchpad.h"
+#include "drivers/motor.h"
 
 // CAN IDs are set dynamically at time of CAN0_Open
 // Reverse on other microcontroller
@@ -93,23 +94,41 @@ DriveMotors(void) {
     static int servoAngle = 90;
     static int motorSpeed = 0;
 
-    servoAngle = 0;
-    motorSpeed = 1000;
+    while (1) {
+        Motor_Initialize();
 
-    Motors_Initialize();
-    Motor_setLeft(500);
-    Motor_setServoservo Angle);
+        motorSpeed = -250;
+        Motor_setLeft(motorSpeed);
 
-    OS_Sleep(2000);
+        OS_Sleep(2000);
 
-    servoAngle = 0;
-    motorSpeed = 1000;
+        motorSpeed = 250;
+        Motor_setLeft(motorSpeed);
 
-    Motors_Initialize();
-    Motor_setLeft(500);
-    Motor_setServoservo Angle);
+        OS_Sleep(2000);
 
-    OS_Kill();
+        motorSpeed = 500;
+        Motor_setLeft(motorSpeed);
+
+        OS_Sleep(2000);
+
+        Motor_setLeft(0);
+
+        servoAngle = 0;
+        Motor_setServo(servoAngle);
+
+        OS_Sleep(2000);
+
+        servoAngle = 90;
+        Motor_setServo(servoAngle);
+
+        OS_Sleep(2000);
+
+        servoAngle = 180;
+        Motor_setServo(servoAngle);
+
+        OS_Sleep(2000);
+    }
 }
 
 void
@@ -133,11 +152,10 @@ realmain(void) { // realmain
     ADC_Init(0);  // sequencer 3, channel 0, PE3, sampling in Interpreter
     CAN0_Open(RCV_ID, XMT_ID);
 
-    OS_AddSW1Task(&DriveMotors, 2);
-
     // create initial foreground threads
     NumCreated = 0;
     NumCreated += OS_AddThread(&Interpreter, 128, 2);
+    NumCreated += OS_AddThread(&DriveMotors, 128, 2);
     NumCreated += OS_AddThread(&Idle, 128, 5);  // at lowest priority
 
     OS_Launch(TIME_2MS); // doesn't return, interrupts enabled in here
@@ -275,6 +293,5 @@ main(void) { 			// main
     ST7735_InitR(INITR_GREENTAB);             // LCD initialization
     UART_Init();                              // serial I/O for interpreter
 
-    Testmain1();
-//    realmain();
+    realmain();
 }

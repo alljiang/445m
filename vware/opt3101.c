@@ -169,6 +169,7 @@ void OPT3101_Init(uint32_t speed){
   GPIO_PORTC_DIR_R &= ~0x10;      // PC4 input
   GPIO_PORTC_DEN_R |= 0x30;       // enable digital I/O on PC4 PC5
   PC5 = 0;    // RST_MS=0, reset
+  DisableInterrupts();
   Clock_Delay1ms(1);
   PC5 = 0x20; // RST_MS=1, reset released
   Clock_Delay1ms(1);
@@ -185,6 +186,7 @@ void OPT3101_Init(uint32_t speed){
   while(!(OPT3101_ReadRegister(0x03) & 0x100)){
     Clock_Delay1ms(1);
   }
+  EnableInterrupts();
 //  while(1){
 //    OPT3101_ReadRegister(0x03);
 //    c++;
@@ -302,7 +304,9 @@ void OPT3101_CalibrateInternalCrosstalk(void){
   reg2e |= 1 << 4;  // INT_XTALK_CALIB = 1 : Start the calibration.
   OPT3101_WriteRegister(0x2e, reg2e);
 
+  DisableInterrupts();
   Clock_Delay1ms(CROSSTALK_SETTLING_TIME_MS);
+  EnableInterrupts();
 
   // The internal crosstalk values could be read from registers 0x3b and 0x3c
   // at this point.

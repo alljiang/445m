@@ -136,6 +136,7 @@ Timer4Init(uint32_t period, uint32_t priority) {
     // Page 722 of datasheet
     SYSCTL_RCGCTIMER_R |= 0x10;
     TIMER4_CTL_R = set_bit_field_u32(TIMER4_CTL_R, 0, 1, 0);            //  1) Disable timer
+    TIMER4_TAV_R = 0;
     TIMER4_CFG_R = 0;                                                   //  2) Set to 32-bit mode
     TIMER4_TAMR_R = set_bit_field_u32(TIMER4_TAMR_R, 0, 2, 0b10);       //  3b) Set timer A to Periodic Mode
     TIMER4_TAMR_R = set_bit_field_u32(TIMER4_TAMR_R, 4, 1, 0b1);        //  4) Set timer A to count up

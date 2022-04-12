@@ -22,7 +22,7 @@
  */
 
 void
-Motors_Initialize();
+Motor_Initialize();
 
 // speed is between (-1000, 1000)
 void
