@@ -104,7 +104,7 @@ AcquireOPT3101(void) {
             while (!OPT3101_CheckDistanceSensor());
             OPT3101_ReadMeasurement();
             opt3101[channel] = OPT3101_GetDistanceMillimeters() * 10; // units 0.01cm
-            opt3101[channel] = opt3101[channel] * 1.0318 - 7483;
+//            opt3101[channel] = opt3101[channel] * 1.0318 - 7483;
 
             packet_opt3101[0] = 2 + channel; // type OPT3101 (ch0: 2, ch1: 3, ch2: 4)
             packet_opt3101[1] = (opt3101[channel] >> 16) & 0xFF;
@@ -315,7 +315,7 @@ main(void) { 			// main
     IR_Initialize();
 
     I2C0_Init(400000, 80000000);
-    OPT3101_Init(5);
+    OPT3101_Init(7);
     OPT3101_Setup();
     OPT3101_CalibrateInternalCrosstalk();
 
