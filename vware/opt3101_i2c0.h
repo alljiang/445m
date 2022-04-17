@@ -60,7 +60,7 @@
  * @return none
  * @brief  Initialize OPT3101.
  */
-void OPT3101_Init(uint32_t frameCount);
+void OPT3101_0_Init(uint32_t frameCount);
 
 
 /**
@@ -70,7 +70,7 @@ void OPT3101_Init(uint32_t frameCount);
  * @return none
  * @brief  Sets up the OPT3101.
  */
-void OPT3101_Setup(void);
+void OPT3101_0_Setup(void);
 
 /**
  * Tells the OPT3101 to do its internal crosstalk calibration.  This
@@ -80,7 +80,7 @@ void OPT3101_Setup(void);
  * @return none
  * @brief  Calibrates for internal crosstalk
  */
-void OPT3101_CalibrateInternalCrosstalk(void);
+void OPT3101_0_CalibrateInternalCrosstalk(void);
 
 /**
  * Starts a new measurement using whatever the last channel was.
@@ -89,7 +89,7 @@ void OPT3101_CalibrateInternalCrosstalk(void);
  * @return none
  * @brief  Start measurement
  */
-void OPT3101_StartMeasurement(void);
+void OPT3101_0_StartMeasurement(void);
 
 /**
  * Starts a new measurement using specified channel.
@@ -98,7 +98,7 @@ void OPT3101_StartMeasurement(void);
  * @return none
  * @brief  Start measurement on a specific channel
  */
-void OPT3101_StartMeasurementChannel(uint32_t ch);
+void OPT3101_0_StartMeasurementChannel(uint32_t ch);
 
 /**
  * Reads measurement data from the OPT3101.
@@ -112,7 +112,7 @@ void OPT3101_StartMeasurementChannel(uint32_t ch);
  * @return none
  * @brief  Reads measurement
  */
-void OPT3101_ReadMeasurement(void);
+void OPT3101_0_ReadMeasurement(void);
 
 /**
  * Returns true if the OPT3101 has reported an error associated with the
@@ -123,7 +123,7 @@ void OPT3101_ReadMeasurement(void);
  * @return true if error, false if no error
  * @brief  check for error
  */
-bool OPT3101_MeasurementError(void);
+bool OPT3101_0_MeasurementError(void);
 
 /**
  * Calculates the distance to the target object in millimeters and returns
@@ -137,7 +137,7 @@ bool OPT3101_MeasurementError(void);
  * @brief  last distance measurement in mm
  * @note values over 1000 are not valid
  */
-uint32_t OPT3101_GetDistanceMillimeters(void);
+uint32_t OPT3101_0_GetDistanceMillimeters(void);
 
 /**
  * Returns the value of the PHASE_OUT output, which generally represents
@@ -148,7 +148,7 @@ uint32_t OPT3101_GetDistanceMillimeters(void);
  * @return phase
  * @brief  last phase measurement
  */
-uint32_t OPT3101_GetPhase(void);
+uint32_t OPT3101_0_GetPhase(void);
 
 /**
  * Returns the value of the AMP_OUT output, which generally represents
@@ -159,7 +159,7 @@ uint32_t OPT3101_GetPhase(void);
  * @return amplitude
  * @brief  last amplitude measurement
  */
-uint32_t OPT3101_GetAmplitude(void);
+uint32_t OPT3101_0_GetAmplitude(void);
 
 /**
  * Returns the transmitter channel number that the last reading came from.
@@ -171,7 +171,7 @@ uint32_t OPT3101_GetAmplitude(void);
  * @return channel
  * @brief  channel of last measurement
  */
-uint32_t OPT3101_GetTxChannel(void);
+uint32_t OPT3101_0_GetTxChannel(void);
 
 /**
  * Checks to see if measurement is complete. Busy wait utilization<br>
@@ -182,7 +182,7 @@ uint32_t OPT3101_GetTxChannel(void);
  * @return true if we have a new distance measurement ready to be read, false otherwise.
  * @brief  new measurement ready
  */
-bool OPT3101_CheckDistanceSensor(void);
+bool OPT3101_0_CheckDistanceSensor(void);
 
 /**
  * Reads results and returns values, assumes a new measurement is complete.
@@ -198,7 +198,7 @@ bool OPT3101_CheckDistanceSensor(void);
  * @return channel number for the last measurement
  * @brief  get measurements from last measurement
  */
-uint32_t OPT3101_GetMeasurement(uint32_t distances[3], uint32_t amplitudes[3]);
+uint32_t OPT3101_0_GetMeasurement(uint32_t distances[3], uint32_t amplitudes[3]);
 
 /**
  * Configure the OPT3101 for continuous, interrupt driven measurements.
@@ -216,4 +216,4 @@ uint32_t OPT3101_GetMeasurement(uint32_t distances[3], uint32_t amplitudes[3]);
  * @return none
  * @brief  get measurements from last measurement
  */
-void OPT3101_ArmInterrupts(uint32_t *pTxChan, uint32_t distances[3], uint32_t amplitudes[3]);
+void OPT3101_0_ArmInterrupts(uint32_t *pTxChan, uint32_t distances[3], uint32_t amplitudes[3]);

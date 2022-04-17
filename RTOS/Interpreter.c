@@ -135,34 +135,20 @@ const char str_create[] = "create";
 const char str_wspam[] = "wspam";
 const char str_newline[] = "\r\n";
 
-const char msg_format_success[] =
-        "Successfully formatted SD card\r\n";
-const char msg_format_fail[] =
-        "Format SD card failed\r\n";
-const char msg_read_fail[] =
-        "Could not open file for reading\r\n";
-const char msg_delete_fail[] =
-        "Failed to delete file\r\n";
-const char msg_delete_success[] =
-        "Successfully deleted file\r\n";
-const char msg_wopen_success[] =
-        "Successfully opened file for writing\r\n";
-const char msg_wopen_fail[] =
-        "Failed to open file for writing\r\n";
-const char msg_write_fail[] =
-        "Failed to write file\r\n";
-const char msg_write_success[] =
-        "Write file success\r\n";
-const char msg_wclose_success[] =
-        "Successfully closed file from writing\r\n";
-const char msg_wclose_fail[] =
-        "Failed to close file from writing\r\n";
-const char msg_create_success[] =
-        "Successfully created file\r\n";
-const char msg_create_fail[] =
-        "Failed to create file\r\n";
-const char msg_spam_success[] =
-        "File spam success\r\n";
+const char msg_format_success[] = "Successfully formatted SD card\r\n";
+const char msg_format_fail[] = "Format SD card failed\r\n";
+const char msg_read_fail[] = "Could not open file for reading\r\n";
+const char msg_delete_fail[] = "Failed to delete file\r\n";
+const char msg_delete_success[] = "Successfully deleted file\r\n";
+const char msg_wopen_success[] = "Successfully opened file for writing\r\n";
+const char msg_wopen_fail[] = "Failed to open file for writing\r\n";
+const char msg_write_fail[] = "Failed to write file\r\n";
+const char msg_write_success[] = "Write file success\r\n";
+const char msg_wclose_success[] = "Successfully closed file from writing\r\n";
+const char msg_wclose_fail[] = "Failed to close file from writing\r\n";
+const char msg_create_success[] = "Successfully created file\r\n";
+const char msg_create_fail[] = "Failed to create file\r\n";
+const char msg_spam_success[] = "File spam success\r\n";
 
 extern uint32_t NumCreated;
 extern uint32_t MaxJitter;
@@ -231,14 +217,14 @@ Interpreter_Parse(char *buffer) {
         if (rv != 0) {
             UART_OutStringNonBlock((char*) msg_read_fail);
         } else {
-           char c;
-           rv = eFile_ReadNext(&c);
-           while (rv == 0) {
-               UART_OutCharNonBlock(c);
-               rv = eFile_ReadNext(&c);
-           }
-           eFile_RClose();
-           UART_OutStringNonBlock((char*) str_newline);
+            char c;
+            rv = eFile_ReadNext(&c);
+            while (rv == 0) {
+                UART_OutCharNonBlock(c);
+                rv = eFile_ReadNext(&c);
+            }
+            eFile_RClose();
+            UART_OutStringNonBlock((char*) str_newline);
         }
     } else if (EQ(str_rm, token)) {
         char *filename = getNextToken(&buffer);
@@ -337,11 +323,13 @@ Interpreter(void) {
         }
         do {
             input = UART_InCharNonBlock();
+
+            if (input == 0) OS_Suspend();
+
         } while (input == 0);
         UART_OutCharNonBlock(input);
 
         if (input == '\r') UART_OutCharNonBlock('\n');
-
 
         if (buffer_index >= sizeof(buffer) - 1) {
             buffer_index = 0;
