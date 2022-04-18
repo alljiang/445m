@@ -122,7 +122,7 @@ static uint32_t reg08_3, reg09_3;
 uint32_t
 OPT3101_ReadRegister_3(uint8_t address) {
     uint8_t buffer[3];
-    I2C3_Send1(I2C_ADDRESS, address);
+    int x = I2C3_Send1(I2C_ADDRESS, address);
     I2C3_Recv3(I2C_ADDRESS, buffer);
     return buffer[0] + ((uint32_t) buffer[1] << 8)
             + ((uint32_t) buffer[2] << 16);
@@ -149,8 +149,8 @@ OPT3101_WriteRegister_3(uint8_t address, uint32_t data) {
 //  I2C0_Send(I2C_ADDRESS, buffer, sizeof(buffer));
 //}
 //int c=0;
-#define PC4   (*((volatile uint32_t *)0x40006040))
-#define PC5   (*((volatile uint32_t *)0x40006080))
+#define PC6   (*((volatile uint32_t *)0x40006100))
+#define PC7   (*((volatile uint32_t *)0x40006200))
 void
 OPT3101_3_Init(uint32_t speed) {
     if ((speed == 0) || (speed > 9)) speed = 7;
@@ -163,22 +163,22 @@ OPT3101_3_Init(uint32_t speed) {
     SYSCTL_RCGCGPIO_R |= 0x00000004;  // 1) activate clock for Port C
     while ((SYSCTL_PRGPIO_R & 0x04) == 0) {
     };  // allow time for clock to stabilize
-    GPIO_PORTC_DIR_R |= 0x20;       // PC5 out
-    GPIO_PORTC_DIR_R &= ~0x10;      // PC4 input
-    GPIO_PORTC_DEN_R |= 0x30;       // enable digital I/O on PC4 PC5
-    PC5 = 0;    // RST_MS=0, reset
+    GPIO_PORTC_DIR_R |= 0x80;       // PC7 out
+    GPIO_PORTC_DIR_R &= ~0x40;      // PC6 input
+    GPIO_PORTC_DEN_R |= 0xC0;       // enable digital I/O on PC6 PC7
+    PC7 = 0;    // RST_MS=0, reset
     DisableInterrupts();
     Clock_Delay1ms(1);
-    PC5 = 0x20; // RST_MS=1, reset released
+    PC7 = 0x80; // RST_MS=1, reset released
     Clock_Delay1ms(1);
 
-    // Make PC4 is an input for the DATA_RDY signal.
+    // Make PC6 is an input for the DATA_RDY signal.
     // Set up P6.2/AUXR to detect low-to-high transitions.
-    GPIO_PORTC_IS_R &= ~0x10;    // PC4 is edge-sensitive
-    GPIO_PORTC_IBE_R &= ~0x10;   // PC4 is not both edges
-    GPIO_PORTC_IEV_R |= 0x10;    // PC4 rising edge event
-    GPIO_PORTC_ICR_R = 0x10;     // clear flag4
-    GPIO_PORTC_IM_R &= ~0x10;    // disarm interrupt on PC4
+    GPIO_PORTC_IS_R &= ~0x40;    // PC6 is edge-sensitive
+    GPIO_PORTC_IBE_R &= ~0x40;   // PC6 is not both edges
+    GPIO_PORTC_IEV_R |= 0x40;    // PC6 rising edge event
+    GPIO_PORTC_ICR_R = 0x40;     // clear flag6
+    GPIO_PORTC_IM_R &= ~0x40;    // disarm interrupt on PC6
 
     // Wait until INIT_LOAD_DONE gets set to 1.
     while (!(OPT3101_ReadRegister_3(0x03) & 0x100)) {
@@ -385,7 +385,7 @@ OPT3101_3_GetDistanceMillimeters(void) {
 // Returns true if we have a new distance measurement ready to be read, false otherwise.
 bool
 OPT3101_3_CheckDistanceSensor(void) {
-    if ((GPIO_PORTC_RIS_R & 0x10) == 0) {
+    if ((GPIO_PORTC_RIS_R & 0x40) == 0) {
         // Data is not ready yet.
         return false;
     }
@@ -419,7 +419,7 @@ OPT3101_3_GetMeasurement(uint32_t distances[3], uint32_t amplitudes[3]) {
     }
 
     // Clear the pin-change interrupt flag.
-    GPIO_PORTC_ICR_R = 0x10;
+    GPIO_PORTC_ICR_R = 0x40;
     if (channel <= 2) {
         ChannelCount_3[channel]++;
         distances[channel] = distance;
@@ -435,13 +435,13 @@ OPT3101_3_ArmInterrupts(uint32_t *pTxChan, uint32_t distances[3],
     Pdistances_3 = distances;
     Pamplitudes_3 = amplitudes;
     // Make PC4/AUXR be an input for the DATA_RDY signal.
-    GPIO_PORTC_DIR_R &= ~0x10;   // (c) make PC4 in
-    GPIO_PORTC_DEN_R |= 0x10;    //     enable digital I/O on PC4
-    GPIO_PORTC_IS_R &= ~0x10;    // (d) PC4 is edge-sensitive
-    GPIO_PORTC_IBE_R &= ~0x10;   //     PC4 is not both edges
-    GPIO_PORTC_IEV_R |= 0x10;    //     PC4 rising edge event
-    GPIO_PORTC_ICR_R = 0x10;     // (e) clear flag4
-    GPIO_PORTC_IM_R |= 0x10;     // (f) arm interrupt on PC4
+    GPIO_PORTC_DIR_R &= ~0x40;   // (c) make PC4 in
+    GPIO_PORTC_DEN_R |= 0x40;    //     enable digital I/O on PC4
+    GPIO_PORTC_IS_R &= ~0x40;    // (d) PC4 is edge-sensitive
+    GPIO_PORTC_IBE_R &= ~0x40;   //     PC4 is not both edges
+    GPIO_PORTC_IEV_R |= 0x40;    //     PC4 rising edge event
+    GPIO_PORTC_ICR_R = 0x40;     // (e) clear flag4
+    GPIO_PORTC_IM_R |= 0x40;     // (f) arm interrupt on PC4
     NVIC_PRI0_R = (NVIC_PRI0_R & 0xFF00FFFF) | 0x00A00000; // (g) priority 5
     NVIC_EN0_R = 4;              // (h) enable interrupt 2 in NVIC
 
