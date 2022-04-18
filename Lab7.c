@@ -46,6 +46,7 @@
 #include "RTOS/Interpreter.h"
 #include "RTOS/ST7735.h"
 #include "RTOS/can0.h"
+#include "utils/utils.h"
 
 #include "drivers/ping.h"
 #include "drivers/ir.h"
@@ -83,6 +84,9 @@ extern int32_t MaxJitter;      // largest time jitter between interrupts in usec
 uint32_t opt3101_l[3];
 uint32_t opt3101_r[3];
 
+#define MOTOR_MAX 1000
+#define MOTOR_MIN -1000
+
 void
 PortD_Init(void) {
     SYSCTL_RCGCGPIO_R |= 0x08;       // activate port D
@@ -106,21 +110,17 @@ AcquireOPT3101(void) {
             int channel = 0;
             if (i >= n) channel = 1;
             if (i >= 2*n) channel = 2;
+
             OPT3101_0_StartMeasurementChannel(channel);
-            while (!OPT3101_0_CheckDistanceSensor());   // TODO this may take too long
-            OPT3101_0_ReadMeasurement();
-            opt3101_r[channel] = OPT3101_0_GetDistanceMillimeters() * 10; // units 0.01cm
-
-            OS_Sleep(30);
-        }
-
-        for (i = 0; i < 3*n; i++) {
-            int channel = 0;
-            if (i >= n) channel = 1;
-            if (i >= 2*n) channel = 2;
             OPT3101_3_StartMeasurementChannel(channel);
+
+            while (!OPT3101_0_CheckDistanceSensor());   // TODO this may take too long
             while (!OPT3101_3_CheckDistanceSensor());   // TODO this may take too long
+
+            OPT3101_0_ReadMeasurement();
             OPT3101_3_ReadMeasurement();
+
+            opt3101_r[channel] = OPT3101_0_GetDistanceMillimeters() * 10; // units 0.01cm
             opt3101_l[channel] = OPT3101_3_GetDistanceMillimeters() * 10; // units 0.01cm
 
             OS_Sleep(30);
@@ -161,11 +161,32 @@ Idle(void) {
     }
 }
 
+enum ControlState {
+        STOP,
+        GO_SIDE,
+        GO_MIDDLE,
+        GO_FRONT
+};
+
+#define GO_SIDE_KP 1
+#define GO_SIDE_KI 1
+#define GO_SIDE_KD 1
+
+#define GO_SIDE_KI_SCALE 100
+
 void
 Controller(void) {
-    while (1) {
-        int ll, lm, lr, rl, rm, rr;
+    enum ControlState state = STOP, lastState = STOP, nextState = STOP;
+    int speedL, speedR, baseSpeed = 300;
+    int ll, lm, lr, rl, rm, rr;
 
+    int side_error = 0;
+    int side_integral = 0;
+    int side_lastError = 0;
+
+    while (1) {
+
+        // get sensor readings
         ll = opt3101_l[0];
         lm = opt3101_l[1];
         lr = opt3101_l[2];
@@ -173,13 +194,50 @@ Controller(void) {
         rm = opt3101_r[1];
         rr = opt3101_r[0];
 
-        ST7735_Message(0, 1, "LL ", ll);
+        ST7735_Message(0, 0, "LL ", ll);
         ST7735_Message(0, 1, "LM ", lm);
-        ST7735_Message(0, 1, "LR ", lr);
-        ST7735_Message(0, 1, "RL ", rl);
-        ST7735_Message(0, 1, "RM ", rm);
-        ST7735_Message(0, 1, "RR ", rr);
+        ST7735_Message(0, 2, "LR ", lr);
+        ST7735_Message(0, 3, "RL ", rl);
+        ST7735_Message(0, 4, "RM ", rm);
+        ST7735_Message(0, 5, "RR ", rr);
 
+        if (state == STOP) {
+            speedL = 0;
+            speedR = 0;
+        } else if (state == GO_SIDE) {
+            // setpoint is just 0
+            side_error = ll - rr;
+
+            if (lastState != GO_SIDE) {
+                // first iteration, reset some parameters
+                side_integral = 0;
+                side_lastError = side_error;
+            }
+
+            int side_p = GO_SIDE_KP * side_error;
+            int side_i = side_integral / GO_SIDE_KI_SCALE;
+            int side_d = GO_SIDE_KD * (side_error - side_lastError);
+
+            // update lastError
+            side_lastError = side_error;
+
+            // cap the I term
+            side_integral += GO_SIDE_KI * side_error;
+            side_integral = limit(side_integral, -MOTOR_MIN * GO_SIDE_KI_SCALE, MOTOR_MAX * GO_SIDE_KI_SCALE);
+
+            int side_output = side_p + side_i + side_d;
+            side_output = limit(side_output, -MOTOR_MIN, MOTOR_MAX);
+
+            speedL = baseSpeed + side_output;
+            speedR = baseSpeed - side_output;
+        } else {
+            while (1);
+        }
+
+        // TODO send speedL and speedR
+
+        lastState = state;
+        state = nextState;
         OS_Sleep(20);
     }
 }
@@ -191,12 +249,12 @@ realmain(void) { // realmain
 
     CAN0_Open(RCV_ID, XMT_ID);
 
-    OS_AddPeriodicThread(&HCSR04_StartMeasurement, 80000000 / 20, 2);   // 20 Hz
+//    OS_AddPeriodicThread(&, 80000000 / 20, 2);   // 20 Hz
 
     // create initial foreground threads
     NumCreated = 0;
     NumCreated += OS_AddThread(&AcquireOPT3101, 128, 2);
-    NumCreated += OS_AddThread(&Interpreter, 128, 2);
+    NumCreated += OS_AddThread(&Interpreter, 128, 3);
     NumCreated += OS_AddThread(&Controller, 128, 3);
     NumCreated += OS_AddThread(&CANHandler, 128, 3);
     NumCreated += OS_AddThread(&Idle, 128, 5);  // at lowest priority
