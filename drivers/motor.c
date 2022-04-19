@@ -75,11 +75,11 @@ Motor_setRight(int speed) {
     PWM_GEN_MODE_DOWN | PWM_GEN_MODE_NO_SYNC);
     PWMGenPeriodSet(PWM0_BASE, PWM_GEN_0, genPeriod);
 
-    if (speed > 0) {
+    if (speed < 0) {
         PWMPulseWidthSet(PWM0_BASE, PWM_OUT_1, speedPeriod);
         PWMOutputState(PWM0_BASE, PWM_OUT_1_BIT, true);
         PWMOutputState(PWM0_BASE, PWM_OUT_0_BIT, false);
-    } else if (speed < 0) {
+    } else if (speed > 0) {
         PWMPulseWidthSet(PWM0_BASE, PWM_OUT_0, speedPeriod);
         PWMOutputState(PWM0_BASE, PWM_OUT_0_BIT, true);
         PWMOutputState(PWM0_BASE, PWM_OUT_1_BIT, false);
@@ -112,11 +112,11 @@ Motor_setLeft(int speed) {
     PWM_GEN_MODE_DOWN | PWM_GEN_MODE_NO_SYNC);
     PWMGenPeriodSet(PWM0_BASE, PWM_GEN_1, genPeriod);
 
-    if (speed > 0) {
+    if (speed < 0) {
         PWMPulseWidthSet(PWM0_BASE, PWM_OUT_3, speedPeriod);
         PWMOutputState(PWM0_BASE, PWM_OUT_3_BIT, true);
         PWMOutputState(PWM0_BASE, PWM_OUT_2_BIT, false);
-    } else if (speed < 0) {
+    } else if (speed > 0) {
         PWMPulseWidthSet(PWM0_BASE, PWM_OUT_2, speedPeriod);
         PWMOutputState(PWM0_BASE, PWM_OUT_2_BIT, true);
         PWMOutputState(PWM0_BASE, PWM_OUT_3_BIT, false);

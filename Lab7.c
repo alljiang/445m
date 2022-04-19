@@ -87,24 +87,11 @@ uint32_t opt3101_r[3];
 #define MOTOR_MAX 1000
 #define MOTOR_MIN -1000
 
-void
-PortD_Init(void) {
-    SYSCTL_RCGCGPIO_R |= 0x08;       // activate port D
-    while ((SYSCTL_RCGCGPIO_R & 0x08) == 0) {
-    };
-    GPIO_PORTD_DIR_R |= 0x0F;        // make PD3-0 output heartbeats
-    GPIO_PORTD_AFSEL_R &= ~0x0F;     // disable alt funct on PD3-0
-    GPIO_PORTD_DEN_R |= 0x0F;        // enable digital I/O on PD3-0
-    GPIO_PORTD_PCTL_R = ~0x0000FFFF;
-    GPIO_PORTD_AMSEL_R &= ~0x0F;
-    ;    // disable analog functionality on PD
-}
-
 uint8_t packet_motor[4];
 void
 CANSendMotor(int left, int right) {
     // make left and right 12 bits each
-    packet_motor[0] = 1; // type motor speed
+    packet_motor[0] = 0; // type motor speed
 
     // total 24 bits 
     // 1: left[12:4]
@@ -114,7 +101,7 @@ CANSendMotor(int left, int right) {
     packet_motor[2] = ((left & 0x0F) << 4) | ((right >> 8) & 0x0F);
     packet_motor[3] = right & 0xFF;
 
-    CAN0_SendData(packet_ir);
+    CAN0_SendData(packet_motor);
 }
 
 void
@@ -128,21 +115,21 @@ AcquireOPT3101(void) {
             if (i >= n) channel = 1;
             if (i >= 2*n) channel = 2;
 
-//            OPT3101_0_StartMeasurementChannel(channel);
+            OPT3101_0_StartMeasurementChannel(channel);
             OPT3101_3_StartMeasurementChannel(channel);
 
-//            while (!OPT3101_0_CheckDistanceSensor()) {
-//                OS_Sleep(3);
-//            }
+            while (!OPT3101_0_CheckDistanceSensor()) {
+                OS_Sleep(3);
+            }
             while (!OPT3101_3_CheckDistanceSensor()) {
                 OS_Sleep(3);
             }
 
-//            OPT3101_0_ReadMeasurement();
+            OPT3101_0_ReadMeasurement();
             OPT3101_3_ReadMeasurement();
 
-//            opt3101_r[channel] = OPT3101_0_GetDistanceMillimeters() * 10; // units 0.01cm
-            opt3101_l[channel] = OPT3101_3_GetDistanceMillimeters() * 10; // units 0.01cm
+            opt3101_l[channel] = OPT3101_0_GetDistanceMillimeters() * 10; // units 0.01cm
+            opt3101_r[channel] = OPT3101_3_GetDistanceMillimeters() * 10; // units 0.01cm
 
             OS_Sleep(30); // TODO may or may not need
         }
@@ -189,16 +176,16 @@ enum ControlState {
         GO_FRONT
 };
 
-#define GO_SIDE_KP 0.05
+#define GO_SIDE_KP 0.005
 #define GO_SIDE_KI 0
 #define GO_SIDE_KD 0
 
-#define GO_SIDE_KI_SCALE 100
+#define GO_SIDE_KI_SCALE 1000
 
 void
 Controller(void) {
     enum ControlState state = STOP, lastState = STOP, nextState = STOP;
-    int speedL, speedR, baseSpeed = 300;
+    int speedL, speedR, baseSpeed = 600;
     int ll, lm, lr, rl, rm, rr;
 
     int side_error = 0;
@@ -225,9 +212,12 @@ Controller(void) {
         if (state == STOP) {
             speedL = 0;
             speedR = 0;
+
+            //TODO
+            nextState = GO_SIDE;
         } else if (state == GO_SIDE) {
             // setpoint is just 0
-            side_error = ll - rr;
+            side_error = rr - ll;
 
             if (lastState != GO_SIDE) {
                 // first iteration, reset some parameters
@@ -244,18 +234,21 @@ Controller(void) {
 
             // cap the I term
             side_integral += GO_SIDE_KI * side_error;
-            side_integral = limit(side_integral, -MOTOR_MIN * GO_SIDE_KI_SCALE, MOTOR_MAX * GO_SIDE_KI_SCALE);
+            side_integral = limit(side_integral, MOTOR_MIN * GO_SIDE_KI_SCALE, MOTOR_MAX * GO_SIDE_KI_SCALE);
 
             int side_output = side_p + side_i + side_d;
-            side_output = limit(side_output, -MOTOR_MIN, MOTOR_MAX);
+            side_output = limit(side_output, MOTOR_MIN, MOTOR_MAX);
 
             speedL = baseSpeed + side_output;
             speedR = baseSpeed - side_output;
+
+            speedL = limit(speedL, MOTOR_MIN, MOTOR_MAX);
+            speedR = limit(speedR, MOTOR_MIN, MOTOR_MAX);
         } else {
             while (1);
         }
 
-//        CANSendMotor(speedL, speedR);
+        CANSendMotor(speedL, speedR);
 
         lastState = state;
         state = nextState;
@@ -266,7 +259,6 @@ Controller(void) {
 int
 realmain(void) { // realmain
     OS_Init();        // initialize, disable interrupts
-    PortD_Init();     // debugging profile
 
     CAN0_Open(RCV_ID, XMT_ID);
 
@@ -276,7 +268,7 @@ realmain(void) { // realmain
     NumCreated = 0;
     NumCreated += OS_AddThread(&AcquireOPT3101, 128, 2);
     NumCreated += OS_AddThread(&Interpreter, 128, 3);
-//    NumCreated += OS_AddThread(&Controller, 128, 3);
+    NumCreated += OS_AddThread(&Controller, 128, 3);
 //    NumCreated += OS_AddThread(&CANHandler, 128, 3);
     NumCreated += OS_AddThread(&Idle, 128, 5);  // at lowest priority
 
@@ -296,11 +288,11 @@ main(void) { 			// main
     I2C0_Init(400000, 80000000);
     I2C3_Init(400000, 80000000);
 
-//    OPT3101_0_Init(7);
+    OPT3101_0_Init(7);
     OPT3101_3_Init(7);
-//    OPT3101_0_Setup();
+    OPT3101_0_Setup();
     OPT3101_3_Setup();
-//    OPT3101_0_CalibrateInternalCrosstalk();
+    OPT3101_0_CalibrateInternalCrosstalk();
     OPT3101_3_CalibrateInternalCrosstalk();
 
     realmain();

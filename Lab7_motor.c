@@ -93,10 +93,8 @@ DriveMotors(void) {
 
     while (1) {
 
-//        Motor_setRight(200);
-        Motor_setLeft(200);
-//        Motor_setLeft(motorLeft);
-//        Motor_setRight(motorRight);
+        Motor_setLeft(motorLeft);
+        Motor_setRight(motorRight);
 
         OS_Sleep(10);
     }

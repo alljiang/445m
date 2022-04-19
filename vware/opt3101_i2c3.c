@@ -122,7 +122,7 @@ static uint32_t reg08_3, reg09_3;
 uint32_t
 OPT3101_ReadRegister_3(uint8_t address) {
     uint8_t buffer[3];
-    int x = I2C3_Send1(I2C_ADDRESS, address);
+    I2C3_Send1(I2C_ADDRESS, address);
     I2C3_Recv3(I2C_ADDRESS, buffer);
     return buffer[0] + ((uint32_t) buffer[1] << 8)
             + ((uint32_t) buffer[2] << 16);
