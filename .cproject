@@ -87,7 +87,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="Lab7.c|Lab4.c|simtest|Lab3.c|Lab1.c|Lab2.c|vware_unused|driverlib_unused" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="Lab7_motor.c|Lab4.c|simtest|Lab3.c|Lab1.c|Lab2.c|vware_unused|driverlib_unused" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>

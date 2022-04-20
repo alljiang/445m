@@ -113,12 +113,17 @@ Idle(void) {
 void
 CANThread(void) {
     uint8_t buffer[4];
+    int left12bit, right12bit;
     while (1) {
         CAN0_GetMail(buffer);
         
         if (buffer[0] == 0) {
-            motorLeft = (buffer[1] << 4) | (buffer[2] >> 4);
-            motorRight = ((buffer[2] & 0x0F) << 8) | buffer[3];
+            left12bit = (buffer[1] << 4) | (buffer[2] >> 4);
+            right12bit = ((buffer[2] & 0x0F) << 8) | buffer[3];
+
+            // convert 12 bit signed to 32 bit signed
+            motorLeft = (left12bit >> 11) == 0 ? left12bit : -1 ^ 0xFFF | left12bit;
+            motorRight = (right12bit >> 11) == 0 ? right12bit : -1 ^ 0xFFF | right12bit;
         }
     }
 }

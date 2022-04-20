@@ -47,6 +47,7 @@
 #include "RTOS/ST7735.h"
 #include "RTOS/can0.h"
 #include "utils/utils.h"
+#include "utils/uart-utils.h"
 
 #include "drivers/ping.h"
 #include "drivers/ir.h"
@@ -115,23 +116,36 @@ AcquireOPT3101(void) {
             if (i >= n) channel = 1;
             if (i >= 2*n) channel = 2;
 
+            DisableInterrupts();
             OPT3101_0_StartMeasurementChannel(channel);
-            OPT3101_3_StartMeasurementChannel(channel);
+            EnableInterrupts();
 
             while (!OPT3101_0_CheckDistanceSensor()) {
                 OS_Sleep(3);
             }
+
+            DisableInterrupts();
+            OPT3101_0_ReadMeasurement();
+            EnableInterrupts();
+
+            OS_Sleep(30); // TODO may or may not need
+
+            DisableInterrupts();
+            OPT3101_3_StartMeasurementChannel(channel);
+            EnableInterrupts();
+
             while (!OPT3101_3_CheckDistanceSensor()) {
                 OS_Sleep(3);
             }
 
-            OPT3101_0_ReadMeasurement();
+            DisableInterrupts();
             OPT3101_3_ReadMeasurement();
-
+            EnableInterrupts();
+//
             opt3101_l[channel] = OPT3101_0_GetDistanceMillimeters() * 10; // units 0.01cm
             opt3101_r[channel] = OPT3101_3_GetDistanceMillimeters() * 10; // units 0.01cm
-
-            OS_Sleep(30); // TODO may or may not need
+//
+//            OS_Sleep(30); // TODO may or may not need
         }
     }
 }
@@ -172,35 +186,40 @@ Idle(void) {
 enum ControlState {
         STOP,
         GO_SIDE,
-        GO_MIDDLE,
-        GO_FRONT
+        WAITING
 };
 
-#define GO_SIDE_KP 0.005
+#define GO_SIDE_KP 0.1
 #define GO_SIDE_KI 0
-#define GO_SIDE_KD 0
+#define GO_SIDE_KD 0.5
 
 #define GO_SIDE_KI_SCALE 1000
 
 void
 Controller(void) {
     enum ControlState state = STOP, lastState = STOP, nextState = STOP;
-    int speedL, speedR, baseSpeed = 600;
+    int speedL, speedR, feedForward = 0, speedForward = 900;
     int ll, lm, lr, rl, rm, rr;
 
     int side_error = 0;
     int side_integral = 0;
     int side_lastError = 0;
 
+    int transitionTime = 0;
+
     while (1) {
+        int time = OS_MsTime();
 
         // get sensor readings
         ll = opt3101_l[0];
         lm = opt3101_l[1];
         lr = opt3101_l[2];
-        rl = opt3101_r[2];
+        rl = opt3101_r[0];
         rm = opt3101_r[1];
-        rr = opt3101_r[0];
+        rr = opt3101_r[2];
+
+        int minLeft = min(min(ll, lm), lr);
+        int minRight = min(min(rl, rm), rr);
 
         ST7735_Message(0, 0, "LL ", ll);
         ST7735_Message(0, 1, "LM ", lm);
@@ -209,15 +228,27 @@ Controller(void) {
         ST7735_Message(0, 4, "RM ", rm);
         ST7735_Message(0, 5, "RR ", rr);
 
+        if (rr > ll) {
+            Launchpad_SetLED(LED_RED, true);
+            Launchpad_SetLED(LED_GREEN, false);
+        } else {
+            Launchpad_SetLED(LED_RED, false);
+            Launchpad_SetLED(LED_GREEN, true);
+        }
+
         if (state == STOP) {
             speedL = 0;
             speedR = 0;
 
             //TODO
-            nextState = GO_SIDE;
+            if (time > transitionTime) {
+                transitionTime = time + 600;
+                nextState = GO_SIDE;
+            }
         } else if (state == GO_SIDE) {
             // setpoint is just 0
             side_error = rr - ll;
+//            side_error = minRight - minLeft;
 
             if (lastState != GO_SIDE) {
                 // first iteration, reset some parameters
@@ -239,14 +270,36 @@ Controller(void) {
             int side_output = side_p + side_i + side_d;
             side_output = limit(side_output, MOTOR_MIN, MOTOR_MAX);
 
-            speedL = baseSpeed + side_output;
-            speedR = baseSpeed - side_output;
+            speedL = addMagnitude(side_output + speedForward, feedForward);
+            speedR = addMagnitude(-side_output + speedForward, feedForward + 40);
 
             speedL = limit(speedL, MOTOR_MIN, MOTOR_MAX);
             speedR = limit(speedR, MOTOR_MIN, MOTOR_MAX);
+
+            if (time > transitionTime) {
+                transitionTime = time + 200;
+                nextState = WAITING;
+            }
+        } else if (state == WAITING) {
+            speedL = 0;
+            speedR = 0;
+
+            if (time > transitionTime) {
+                transitionTime = time + 600;
+                nextState = GO_SIDE;
+            }
         } else {
             while (1);
         }
+
+        UART_OutUDecNonBlock(ll);
+        UART_OutStringNonBlock("\t");
+        UART_OutUDecNonBlock(rr);
+        UART_OutStringNonBlock("\tL: ");
+        UART_OutUDecNonBlock(speedL);
+        UART_OutStringNonBlock("\tR: ");
+        UART_OutUDecNonBlock(speedR);
+        UART_OutStringNonBlock("\r\n");
 
         CANSendMotor(speedL, speedR);
 
@@ -285,8 +338,8 @@ main(void) { 			// main
     ST7735_InitR(INITR_GREENTAB);             // LCD initialization
     UART_Init();                              // serial I/O for interpreter
 
-    I2C0_Init(400000, 80000000);
-    I2C3_Init(400000, 80000000);
+    I2C0_Init(200000, 80000000);
+    I2C3_Init(200000, 80000000);
 
     OPT3101_0_Init(7);
     OPT3101_3_Init(7);

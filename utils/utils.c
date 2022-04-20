@@ -24,3 +24,39 @@ limit(int num, int min, int max) {
     }
     return num;
 }
+
+int inline
+min(int a, int b) {
+    int rv = 0;
+
+    if (a < b)
+        rv = a;
+    else
+        rv = b;
+
+    return rv;
+}
+
+int inline
+max(int a, int b) {
+    int rv = 0;
+
+    if (a > b)
+        rv = a;
+    else
+        rv = b;
+
+    return rv;
+}
+
+int inline
+addMagnitude(int num, int addition) {
+    if (addition < 0) addition = -addition;
+
+    if (num > 0)
+        num += addition;
+    else
+        num -= addition;
+
+    return num;
+}
