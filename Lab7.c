@@ -82,10 +82,11 @@ extern int32_t MaxJitter;      // largest time jitter between interrupts in usec
 #define PD3  (*((volatile uint32_t *)0x40007020))
 
 //---------------------ROBOT CAR STUFFS---------------------
-uint32_t opt3101_l[3];
-uint32_t opt3101_r[3];
-uint32_t opt3101_l_raw[3];
-uint32_t opt3101_r_raw[3];
+uint32_t TxChannel_0, TxChannel_1;
+uint32_t Amplitudes_0[3];
+uint32_t Amplitudes_1[3];
+uint32_t Distances_0[3];
+uint32_t Distances_1[3];
 
 #define MOTOR_MAX 1000
 #define MOTOR_MIN -1000
@@ -107,82 +108,7 @@ CANSendMotor(int left, int right) {
     CAN0_SendData(packet_motor);
 }
 
-#define MAX_SENSOR_DISTANCE 8000    // bigger = more turning ability but less stability while going straightish
-
-void
-AcquireOPT3101(void) {
-
-    while (1) {
-        int n = 1, i;
-
-        for (i = 0; i < 3 * n; i++) {
-            int channel = 0;
-            if (i >= n) channel = 1;
-            if (i >= 2 * n) channel = 2;
-
-            DisableInterrupts();
-            OPT3101_0_StartMeasurementChannel(channel);
-            EnableInterrupts();
-
-            while (!OPT3101_0_CheckDistanceSensor()) {
-                OS_Sleep(3);
-            }
-
-            DisableInterrupts();
-            OPT3101_0_ReadMeasurement();
-            EnableInterrupts();
-
-            OS_Sleep(30); // TODO may or may not need
-
-            DisableInterrupts();
-            OPT3101_3_StartMeasurementChannel(channel);
-            EnableInterrupts();
-
-            while (!OPT3101_3_CheckDistanceSensor()) {
-                OS_Sleep(3);
-            }
-
-            DisableInterrupts();
-            OPT3101_3_ReadMeasurement();
-
-            opt3101_l_raw[channel] = OPT3101_0_GetDistanceMillimeters() * 10; // units 0.01cm
-            opt3101_r_raw[channel] = OPT3101_3_GetDistanceMillimeters() * 10; // units 0.01cm
-
-            opt3101_l_raw[channel] = min(opt3101_l_raw[channel], MAX_SENSOR_DISTANCE);
-            opt3101_r_raw[channel] = min(opt3101_r_raw[channel], MAX_SENSOR_DISTANCE);
-
-            opt3101_l[channel] = opt3101_l[channel] * 0.6 + opt3101_l_raw[channel] * 0.4;
-            opt3101_r[channel] = opt3101_r[channel] * 0.6 + opt3101_r_raw[channel] * 0.4;
-
-            EnableInterrupts();
-
-            OS_Sleep(30); // TODO may or may not need
-        }
-    }
-}
-
-const char *str_error = "ERROR ";
-
-void
-CANHandler(void) {
-    uint8_t buffer[4];
-    int data;
-
-    while (1) {
-        // Suspend OS if mail not available
-        while (!CAN0_CheckMail()) {
-            OS_Suspend();
-        }
-        CAN0_GetMail(buffer);
-
-        data = (buffer[1] << 16) | (buffer[2] << 8) | buffer[3];
-
-        if (buffer[0] == 0) {
-        } else if (buffer[0] == 1) {
-        } else {
-        }
-    }
-}
+#define MAX_SENSOR_DISTANCE 800    // bigger = more turning ability but less stability while going straightish
 
 void
 Idle(void) {
@@ -198,15 +124,32 @@ enum ControlState {
     STOP, GOGOGO, WAITING
 };
 
-#define DISTANCE_KP 0.11
-#define DISTANCE_KI 0.02
-#define DISTANCE_KD 0.30
+#define DISTANCE_KP 0.12
+#define DISTANCE_KI 0.0017
+#define DISTANCE_KD 0.15
 
-#define ANGLE_KP 0.05
+#define ANGLE_KP 0.0
 #define ANGLE_KI 0.0
 #define ANGLE_KD 0.0
 
 #define KI_SCALE 1000
+
+char *str_ll = "ll: ";
+char *str_lm = "lm: ";
+char *str_lr = "lr: ";
+char *str_rl = "rl: ";
+char *str_rightm = "rm: ";
+char *str_rr = "rr: ";
+
+void
+printTelemetryScreen() {
+    ST7735_Message(0, 0, str_ll, Distances_0[0]);
+    ST7735_Message(0, 1, str_lm, Distances_0[1]);
+    ST7735_Message(0, 2, str_lr, Distances_0[2]);
+    ST7735_Message(0, 3, str_rl, Distances_1[0]);
+    ST7735_Message(0, 4, str_rightm, Distances_1[1]);
+    ST7735_Message(0, 5, str_rr, Distances_1[2]);
+}
 
 void
 Controller(void) {
@@ -214,42 +157,44 @@ Controller(void) {
     int speedL, speedR, feedForward = 0, speedForward = 950;
     int ll, lm, lr, rl, rm, rr;
 
-    int distance_error = 0, angle_error = 0;
-    int64_t distance_integral = 0, angle_integral = 0;
-    int distance_lastError = 0, angle_lastError = 0;
-    int distance_lastD = 0, angle_lastD = 0;
+    int distance_error = 0;
+    int64_t distance_integral = 0;
+    int distance_lastError = 0;
+    int distance_lastD = 0;
 
     int transitionTime = 0;
 
+    Launchpad_SetLED(LED_BLUE, true);
+
+    // Wait for Button Press
+    while (!Launchpad_SW1Pressed()) {
+        printTelemetryScreen();
+    }
+
+    Launchpad_SetLED(LED_BLUE, false);
+    ST7735_FillScreen(0);
     ST7735_PlotClear(-500, 500);
 
     while (1) {
         int time = OS_MsTime();
 
         // get sensor readings
-        ll = opt3101_l[0];
-        lm = opt3101_l[1];
-        lr = opt3101_l[2];
-        rl = opt3101_r[0];
-        rm = opt3101_r[1];
-        rr = opt3101_r[2];
+        ll = min(Distances_0[0], MAX_SENSOR_DISTANCE);
+        lm = min(Distances_0[1], MAX_SENSOR_DISTANCE);
+        lr = min(Distances_0[2], MAX_SENSOR_DISTANCE);
+        rl = min(Distances_1[0], MAX_SENSOR_DISTANCE);
+        rm = min(Distances_1[1], MAX_SENSOR_DISTANCE);
+        rr = min(Distances_1[2], MAX_SENSOR_DISTANCE);
 
         // Calculate Average Distances
-        int leftSum = 0, rightSum = 0, leftAvg, rightAvg;
-        leftSum += ll + lm + lr;
-        rightSum += rl + rm + rr;
-        leftAvg = leftSum / 3;
-        rightAvg = rightSum / 3;
+        int leftSum = 0, rightSum = 0, leftDistance, rightDistance;
+        leftSum += ll + lm;
+        rightSum += rm + rr;
+        leftDistance = leftSum * 10 / 2;
+        rightDistance = rightSum * 10 / 2;
 
-        // Calculate Angle Differences
-        int leftAngle = lm - ll;
-        int rightAngle = rm - rl;
-
-        Launchpad_SetLED(LED_RED, leftAngle > rightAngle);
-        Launchpad_SetLED(LED_GREEN, leftAngle < rightAngle);
-
-//        Launchpad_SetLED(LED_RED, leftDistance > rightDistance);
-//        Launchpad_SetLED(LED_GREEN, leftDistance < rightDistance);
+        Launchpad_SetLED(LED_RED, leftDistance > rightDistance);
+        Launchpad_SetLED(LED_GREEN, leftDistance < rightDistance);
 
         if (state == STOP) {
             speedL = 0;
@@ -267,16 +212,12 @@ Controller(void) {
                 distance_integral = 0;
                 distance_lastD = 0;
                 distance_lastError = distance_error;
-
-                angle_integral = 0;
-                angle_lastD = 0;
-                angle_lastError = angle_error;
             }
 
             ST7735_ClearColumn();
 
             // ========== Layer 1 - Distance PID ==========
-            distance_error = rightAvg - leftAvg;
+            distance_error = rightDistance - leftDistance;
 
             int distance_p = DISTANCE_KP * distance_error;
             int distance_i = distance_integral / KI_SCALE;
@@ -289,7 +230,8 @@ Controller(void) {
 
             // cap the I term
             distance_integral += DISTANCE_KI * distance_error;
-            distance_integral = limit(distance_integral, MOTOR_MIN * KI_SCALE,
+            distance_integral = limit(distance_integral,
+            MOTOR_MIN * KI_SCALE,
             MOTOR_MAX * KI_SCALE);
 
             int distance_output = distance_p + distance_i + distance_lastD;
@@ -300,56 +242,22 @@ Controller(void) {
                     feedForward + 20);
 
             // ========== End of Layer 1 ==========
-            // ========== Layer 2 - Angle PID ==========
-            angle_error = rightAngle - leftAngle;
-
-            int angle_p = DISTANCE_KP * angle_error;
-            int angle_i = angle_integral / KI_SCALE;
-            int angle_d = ANGLE_KD * (angle_error - angle_lastError);
-            angle_lastD = angle_lastD * 0.4 + angle_d * 0.6;
-
-            // update lastError
-            angle_lastError = angle_error;
-
-            // cap the I term
-            angle_integral += ANGLE_KI * angle_error;
-            angle_integral = limit(angle_integral, MOTOR_MIN * KI_SCALE,
-                    MOTOR_MAX * KI_SCALE);
-
-            int angle_output = angle_p + angle_i + angle_lastD;
-            angle_output = limit(angle_output, MOTOR_MIN, MOTOR_MAX);
-
-            speedL += angle_output;
-            speedR -= angle_output;
-
-            // ========== End of Layer 2 ==========
             // ========== Debug Plotting ==========
 
             // Distance
-//            ST7735_Message(0, 0, "ER ", distance_error);
-//            ST7735_Message(0, 1, "P  ", distance_p);
-//            ST7735_Message(0, 2, "D  ", distance_lastD);
-//            ST7735_PlotPoint(distance_output, ST7735_WHITE);
-//            ST7735_PlotPoint(distance_p, ST7735_GREEN);
-//            ST7735_PlotPoint(distance_integral, ST7735_YELLOW);
-//            ST7735_PlotPoint(distance_lastD, ST7735_BLUE);
+            ST7735_Message(0, 0, "ER ", distance_error);
+            ST7735_Message(0, 1, "P  ", distance_p);
+            ST7735_Message(0, 2, "D  ", distance_lastD);
+            ST7735_PlotPoint(distance_output, ST7735_WHITE);
+            ST7735_PlotPoint(distance_p, ST7735_GREEN);
+            ST7735_PlotPoint(distance_integral, ST7735_YELLOW);
+            ST7735_PlotPoint(distance_lastD, ST7735_BLUE);
 
-            // Angle
-            ST7735_Message(0, 0, "ER ", angle_error);
-            ST7735_Message(0, 1, "P  ", angle_p);
-            ST7735_Message(0, 2, "D  ", angle_lastD);
-            ST7735_PlotPoint(angle_output, ST7735_WHITE);
-            ST7735_PlotPoint(angle_p, ST7735_GREEN);
-            ST7735_PlotPoint(angle_integral, ST7735_YELLOW);
-            ST7735_PlotPoint(angle_lastD, ST7735_BLUE);
-
-            // Distance + Angle
-//            ST7735_Message(0, 0, "D ER ", angle_error);
-//            ST7735_Message(0, 1, "A ER ", angle_error);
-//            ST7735_PlotPoint(distance_output, ST7735_GREEN);
-//            ST7735_PlotPoint(distance_error, ST7735_MAGENTA);
-//            ST7735_PlotPoint(angle_output, ST7735_BLUE);
-//            ST7735_PlotPoint(angle_error, ST7735_CYAN);
+            if (speedL < 950 && speedR < 950) {
+                Launchpad_SetLED(LED_BLUE, true);
+            } else {
+                Launchpad_SetLED(LED_BLUE, false);
+            }
 
             // ======= End of Debug Plotting =======
 
@@ -372,23 +280,9 @@ Controller(void) {
             while (1);
         }
 
-//        UART_OutStringNonBlock("ll: ");
-//        UART_OutUDecNonBlock(ll);
-//        UART_OutStringNonBlock("\trr: ");
-//        UART_OutUDecNonBlock(rr);
-//        UART_OutStringNonBlock("\tl: ");
-//        UART_OutUDecNonBlock(leftAvg);
-//        UART_OutStringNonBlock("\tr: ");
-//        UART_OutUDecNonBlock(rightAvg);
-//        UART_OutStringNonBlock("\tL: ");
-//        UART_OutUDecNonBlock(speedL);
-//        UART_OutStringNonBlock("\tR: ");
-//        UART_OutUDecNonBlock(speedR);
-//        UART_OutStringNonBlock("\r\n");
-
         speedL = limit(speedL, MOTOR_MIN, MOTOR_MAX);
         speedR = limit(speedR, MOTOR_MIN, MOTOR_MAX);
-//        CANSendMotor(speedL, speedR);
+        CANSendMotor(speedL, speedR);
 
         lastState = state;
         state = nextState;
@@ -407,17 +301,13 @@ int
 realmain(void) { // realmain
     OS_Init();        // initialize, disable interrupts
 
-    CAN0_Open(RCV_ID, XMT_ID);
-
 //    OS_AddPeriodicThread(&, 80000000 / 20, 2);   // 20 Hz
     OS_AddSW2Task(&Halt, 1);
 
     // create initial foreground threads
     NumCreated = 0;
-    NumCreated += OS_AddThread(&AcquireOPT3101, 128, 2);
     NumCreated += OS_AddThread(&Interpreter, 128, 3);
     NumCreated += OS_AddThread(&Controller, 128, 3);
-//    NumCreated += OS_AddThread(&CANHandler, 128, 3);
     NumCreated += OS_AddThread(&Idle, 128, 5);  // at lowest priority
 
     OS_Launch(TIME_2MS); // doesn't return, interrupts enabled in here
@@ -430,6 +320,10 @@ main(void) { 			// main
     PLL_Init(Bus80MHz);
     GPIO_Initialize();
     Launchpad_PortFInitialize();
+
+    CAN0_Open(RCV_ID, XMT_ID);
+    CANSendMotor(0, 0);
+
     ST7735_InitR(INITR_REDTAB);             // LCD initialization
     UART_Init();                              // serial I/O for interpreter
 
@@ -442,6 +336,14 @@ main(void) { 			// main
     OPT3101_3_Setup();
     OPT3101_0_CalibrateInternalCrosstalk();
     OPT3101_3_CalibrateInternalCrosstalk();
+
+    TxChannel_0 = 3;
+    OPT3101_0_ArmInterrupts(&TxChannel_0, Distances_0, Amplitudes_0);
+    OPT3101_0_StartMeasurementChannel(1);
+
+    TxChannel_1 = 3;
+    OPT3101_3_ArmInterrupts(&TxChannel_1, Distances_1, Amplitudes_1);
+    OPT3101_3_StartMeasurementChannel(1);
 
     realmain();
 }

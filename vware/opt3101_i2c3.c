@@ -435,25 +435,25 @@ OPT3101_3_ArmInterrupts(uint32_t *pTxChan, uint32_t distances[3],
     Pdistances_3 = distances;
     Pamplitudes_3 = amplitudes;
     // Make PC4/AUXR be an input for the DATA_RDY signal.
-    GPIO_PORTC_DIR_R &= ~0x40;   // (c) make PC4 in
-    GPIO_PORTC_DEN_R |= 0x40;    //     enable digital I/O on PC4
-    GPIO_PORTC_IS_R &= ~0x40;    // (d) PC4 is edge-sensitive
-    GPIO_PORTC_IBE_R &= ~0x40;   //     PC4 is not both edges
-    GPIO_PORTC_IEV_R |= 0x40;    //     PC4 rising edge event
-    GPIO_PORTC_ICR_R = 0x40;     // (e) clear flag4
-    GPIO_PORTC_IM_R |= 0x40;     // (f) arm interrupt on PC4
+    GPIO_PORTC_DIR_R &= ~0x40;   // (c) make PC6 in
+    GPIO_PORTC_DEN_R |= 0x40;    //     enable digital I/O on PC6
+    GPIO_PORTC_IS_R &= ~0x40;    // (d) PC6 is edge-sensitive
+    GPIO_PORTC_IBE_R &= ~0x40;   //     PC6 is not both edges
+    GPIO_PORTC_IEV_R |= 0x40;    //     PC6 rising edge event
+    GPIO_PORTC_ICR_R = 0x40;     // (e) clear flag6
+    GPIO_PORTC_IM_R |= 0x40;     // (f) arm interrupt on PC6
     NVIC_PRI0_R = (NVIC_PRI0_R & 0xFF00FFFF) | 0x00A00000; // (g) priority 5
     NVIC_EN0_R = 4;              // (h) enable interrupt 2 in NVIC
 
 }
-// *PTxChan set to 0,1,2 when measurement done
-//void GPIOPortC_Handler(void){
-//    static uint32_t channel = 0;
-//
-//  *PTxChan_3 = OPT3101_3_GetMeasurement(Pdistances_3,Pamplitudes_3);
-//  GPIO_PORTC_ICR_R = 0xFF;     // clear all flags
-//
-//    channel = (channel+1)%3;
-//  OPT3101_3_StartMeasurementChannel(channel);
-//
-//}
+
+//*PTxChan set to 0,1,2 when measurement done
+void OPT3101_3_GPIOPortC_Handler(void) {
+    static uint32_t channel = 0;
+
+    *PTxChan_3 = OPT3101_3_GetMeasurement(Pdistances_3, Pamplitudes_3);
+
+    channel = (channel + 1) % 3;
+    OPT3101_3_StartMeasurementChannel(channel);
+
+}

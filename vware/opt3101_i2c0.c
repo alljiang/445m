@@ -447,28 +447,12 @@ OPT3101_0_ArmInterrupts(uint32_t *pTxChan, uint32_t distances[3],
 
 }
 
-// *PTxChan set to 0,1,2 when measurement done
-extern void
-OPT3101_3_StartMeasurementChannel(uint32_t ch);
-extern uint32_t
-OPT3101_3_GetMeasurement(uint32_t distances[3], uint32_t amplitudes[3]);
-
 void
-GPIOPortC_Handler(void) {
-    // not using interrupts
-//    static uint32_t channel = 0;
-//
-//    *PTxChan_0 = OPT3101_0_GetMeasurement(Pdistances_0, Pamplitudes_0);
-//    GPIO_PORTC_ICR_R = 0xFF;     // clear all flags
-//
-//    channel = (channel + 1) % 3;
-//    OPT3101_0_StartMeasurementChannel(channel);
-//
-//    channel = 0;
-//
-//    *PTxChan_3 = OPT3101_3_GetMeasurement(Pdistances_3, Pamplitudes_3);
-//    GPIO_PORTC_ICR_R = 0xFF;     // clear all flags
-//
-//    channel = (channel + 1) % 3;
-//    OPT3101_3_StartMeasurementChannel(channel);
+OPT3101_0_GPIOPortC_Handler(void) {
+    static uint32_t channel = 0;
+
+    *PTxChan_0 = OPT3101_0_GetMeasurement(Pdistances_0, Pamplitudes_0);
+
+    channel = (channel + 1) % 3;
+    OPT3101_0_StartMeasurementChannel(channel);
 }

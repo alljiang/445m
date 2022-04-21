@@ -23,4 +23,10 @@ Launchpad_ToggleLED(enum LED_Color color);
 extern void
 Launchpad_SetLED(enum LED_Color color, bool state);
 
+extern bool
+Launchpad_SW1Pressed(void);
+
+extern bool
+Launchpad_SW2Pressed(void);
+
 #endif /* DRIVERS_LAUNCHPAD_H_ */

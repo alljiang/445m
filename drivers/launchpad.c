@@ -1,4 +1,3 @@
-
 #include <stdint.h>
 #include "vware/tm4c123gh6pm.h"
 #include "bit-utils.h"
@@ -34,11 +33,11 @@ Launchpad_PortFInitialize() {
 
 void
 Launchpad_ToggleLED(enum LED_Color color) {
-    if(color == LED_RED) {
+    if (color == LED_RED) {
         PF1 ^= generate_bit_mask_u32(1, 1);
-    } else if(color == LED_GREEN) {
+    } else if (color == LED_GREEN) {
         PF3 ^= generate_bit_mask_u32(3, 1);
-    } else if(color == LED_BLUE) {
+    } else if (color == LED_BLUE) {
         PF2 ^= generate_bit_mask_u32(2, 1);
     }
 }
@@ -47,29 +46,39 @@ void
 Launchpad_SetLED(enum LED_Color color, bool state) {
     uint32_t mask;
 
-    if(color == LED_RED) {
+    if (color == LED_RED) {
 //        mask = generate_bit_mask_u32(1, 1);
         mask = 0b10;
-        if(state) {
+        if (state) {
             PF1 |= mask;
         } else {
             PF1 &= ~mask;
         }
-    } else if(color == LED_GREEN) {
+    } else if (color == LED_GREEN) {
 //        mask = generate_bit_mask_u32(3, 1);
         mask = 0b1000;
-        if(state) {
+        if (state) {
             PF3 |= mask;
         } else {
             PF3 &= ~mask;
         }
-    } else if(color == LED_BLUE) {
+    } else if (color == LED_BLUE) {
 //        mask = generate_bit_mask_u32(2, 1);
         mask = 0b100;
-        if(state) {
+        if (state) {
             PF2 |= mask;
         } else {
             PF2 &= ~mask;
         }
     }
+}
+
+bool
+Launchpad_SW1Pressed(void) {
+    return !((PF4 >> 4) & 0x1);
+}
+
+bool
+Launchpad_SW2Pressed(void) {
+    return !(PF0 & 0x1);
 }
