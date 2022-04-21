@@ -125,8 +125,8 @@ enum ControlState {
 };
 
 #define DISTANCE_KP 0.09
-#define DISTANCE_KI 0.0017
-#define DISTANCE_KD 0.17
+#define DISTANCE_KI 0.002
+#define DISTANCE_KD 0.1
 
 #define ANGLE_KP 0.0
 #define ANGLE_KI 0.0
@@ -220,6 +220,8 @@ Controller(void) {
             // ========== Layer 1 - Distance PID ==========
             distance_error = rightDistance - leftDistance;
             distance_dError = distance_error - distance_lastError;
+
+            // filtering for crash detection
             distance_dErrorFiltered = distance_dErrorFiltered * 0.8
                     + abs(distance_dError) * 0.2;
 
@@ -271,6 +273,8 @@ Controller(void) {
             ST7735_PlotPoint(distance_p, ST7735_GREEN);
             ST7735_PlotPoint(distance_integral, ST7735_YELLOW);
             ST7735_PlotPoint(distance_lastD, ST7735_BLUE);
+
+            // Crash Detection
 //            ST7735_Message(0, 2, "DE  ", distance_dErrorFiltered);
 //            ST7735_PlotPoint(distance_dErrorFiltered, ST7735_BLUE);
 
@@ -280,11 +284,11 @@ Controller(void) {
 
         } else if (state == CRASHED) {
             if (crashedOnLeftSide) {
-                speedL = -800;
+                speedL = -750;
                 speedR = -900;
             } else {
                 speedL = -900;
-                speedR = -800;
+                speedR = -750;
             }
 
             if (time > transitionTime) {
