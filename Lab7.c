@@ -177,6 +177,8 @@ Controller(void) {
         printTelemetryScreen();
     }
 
+    OS_ClearMsTime();
+
     ST7735_FillScreen(0);
     ST7735_PlotClear(-500, 500);
 
@@ -201,6 +203,10 @@ Controller(void) {
         if (state == STOP) {
             speedL = 0;
             speedR = 0;
+
+            Launchpad_SetLED(LED_RED, true);
+            Launchpad_SetLED(LED_GREEN, true);
+            Launchpad_SetLED(LED_BLUE, true);
         } else if (state == GOGOGO) {
             Launchpad_SetLED(LED_BLUE, false);
             Launchpad_SetLED(LED_RED, leftDistance > rightDistance);
@@ -309,6 +315,11 @@ Controller(void) {
         speedR = limit(speedR, MOTOR_MIN, MOTOR_MAX);
         CANSendMotor(speedL, speedR);
 
+        // stop condition at 180s?
+        if (time > 180000) {
+            nextState = STOP;
+        }
+
         lastState = state;
         state = nextState;
         OS_Sleep(20);
@@ -316,7 +327,7 @@ Controller(void) {
 }
 
 void
-Halt(void) {
+EmergencyStop(void) {
     while (1) {
         CANSendMotor(0, 0);
     }
@@ -326,8 +337,7 @@ int
 realmain(void) { // realmain
     OS_Init();        // initialize, disable interrupts
 
-//    OS_AddPeriodicThread(&, 80000000 / 20, 2);   // 20 Hz
-    OS_AddSW2Task(&Halt, 1);
+    OS_AddSW2Task(&EmergencyStop, 1);
 
     // create initial foreground threads
     NumCreated = 0;
