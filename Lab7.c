@@ -121,7 +121,7 @@ Idle(void) {
 }
 
 enum ControlState {
-    STOP, GOGOGO, WAITING
+    STOP, GOGOGO, WAITING, CRASHED
 };
 
 #define DISTANCE_KP 0.12
@@ -133,6 +133,9 @@ enum ControlState {
 #define ANGLE_KD 0.0
 
 #define KI_SCALE 1000
+
+#define CRASH_DETECT_THRESHOLD 80
+#define CRASH_DETECT_TIME 500
 
 char *str_ll = "ll: ";
 char *str_lm = "lm: ";
@@ -153,14 +156,17 @@ printTelemetryScreen() {
 
 void
 Controller(void) {
-    enum ControlState state = STOP, lastState = STOP, nextState = STOP;
-    int speedL, speedR, feedForward = 0, speedForward = 950;
+    enum ControlState state = GOGOGO, lastState = STOP, nextState = GOGOGO;
+    int speedL, speedR, feedForward = 0, speedForward = 800;
     int ll, lm, lr, rl, rm, rr;
 
     int distance_error = 0;
     int64_t distance_integral = 0;
     int distance_lastError = 0;
     int distance_lastD = 0;
+    int distance_dError, distance_dErrorFiltered = 0;
+    int time, crashDetectStartTime = -1;
+    bool crashedOnLeftSide;
 
     int transitionTime = 0;
 
@@ -171,12 +177,11 @@ Controller(void) {
         printTelemetryScreen();
     }
 
-    Launchpad_SetLED(LED_BLUE, false);
     ST7735_FillScreen(0);
     ST7735_PlotClear(-500, 500);
 
     while (1) {
-        int time = OS_MsTime();
+        time = OS_MsTime();
 
         // get sensor readings
         ll = min(Distances_0[0], MAX_SENSOR_DISTANCE);
@@ -193,36 +198,34 @@ Controller(void) {
         leftDistance = leftSum * 10 / 2;
         rightDistance = rightSum * 10 / 2;
 
-        Launchpad_SetLED(LED_RED, leftDistance > rightDistance);
-        Launchpad_SetLED(LED_GREEN, leftDistance < rightDistance);
-
         if (state == STOP) {
             speedL = 0;
             speedR = 0;
-
-            //TODO
-            if (time > transitionTime) {
-                transitionTime = time + 600;
-                nextState = GOGOGO;
-            }
         } else if (state == GOGOGO) {
+            Launchpad_SetLED(LED_BLUE, false);
+            Launchpad_SetLED(LED_RED, leftDistance > rightDistance);
+            Launchpad_SetLED(LED_GREEN, leftDistance < rightDistance);
 
             if (lastState != GOGOGO) {
                 // first iteration, reset some parameters
                 distance_integral = 0;
                 distance_lastD = 0;
                 distance_lastError = distance_error;
+
+                crashDetectStartTime = time;
             }
 
             ST7735_ClearColumn();
 
             // ========== Layer 1 - Distance PID ==========
             distance_error = rightDistance - leftDistance;
+            distance_dError = distance_error - distance_lastError;
+            distance_dErrorFiltered = distance_dErrorFiltered * 0.8
+                    + abs(distance_dError) * 0.2;
 
             int distance_p = DISTANCE_KP * distance_error;
             int distance_i = distance_integral / KI_SCALE;
-            int distance_d = DISTANCE_KD
-                    * (distance_error - distance_lastError);
+            int distance_d = DISTANCE_KD * (distance_dError);
             distance_lastD = distance_lastD * 0.4 + distance_d * 0.6;
 
             // update lastError
@@ -242,38 +245,56 @@ Controller(void) {
                     feedForward + 20);
 
             // ========== End of Layer 1 ==========
+            // ========== Layer 2 - Crash Detection ==========
+
+            if (distance_dErrorFiltered > CRASH_DETECT_THRESHOLD) {
+                crashDetectStartTime = time;
+            } else if (time - crashDetectStartTime > CRASH_DETECT_TIME) {
+                // crash detected!
+                crashedOnLeftSide = distance_error > 0;
+
+                transitionTime = time + 700;
+                nextState = CRASHED;
+                Launchpad_SetLED(LED_BLUE, true);
+                Launchpad_SetLED(LED_RED, false);
+                Launchpad_SetLED(LED_GREEN, false);
+            }
+
+            // ========== End of Layer 2 ==========
             // ========== Debug Plotting ==========
 
             // Distance
-            ST7735_Message(0, 0, "ER ", distance_error);
-            ST7735_Message(0, 1, "P  ", distance_p);
-            ST7735_Message(0, 2, "D  ", distance_lastD);
-            ST7735_PlotPoint(distance_output, ST7735_WHITE);
-            ST7735_PlotPoint(distance_p, ST7735_GREEN);
-            ST7735_PlotPoint(distance_integral, ST7735_YELLOW);
-            ST7735_PlotPoint(distance_lastD, ST7735_BLUE);
-
-            if (speedL < 950 && speedR < 950) {
-                Launchpad_SetLED(LED_BLUE, true);
-            } else {
-                Launchpad_SetLED(LED_BLUE, false);
-            }
+//            ST7735_Message(0, 0, "ER ", distance_error);
+//            ST7735_Message(0, 1, "P  ", distance_p);
+//            ST7735_Message(0, 2, "D  ", distance_lastD);
+//            ST7735_PlotPoint(distance_output, ST7735_WHITE);
+//            ST7735_PlotPoint(distance_p, ST7735_GREEN);
+//            ST7735_PlotPoint(distance_integral, ST7735_YELLOW);
+//            ST7735_PlotPoint(distance_lastD, ST7735_BLUE);
+            ST7735_Message(0, 2, "DE  ", distance_dErrorFiltered);
+            ST7735_PlotPoint(distance_dErrorFiltered, ST7735_BLUE);
 
             // ======= End of Debug Plotting =======
 
             ST7735_PlotNext();
 
-//            if (time > transitionTime) {
-//                transitionTime = time + 300;
-//                nextState = WAITING;
-//            }
+        } else if (state == CRASHED) {
+            if (crashedOnLeftSide) {
+                speedL = -800;
+                speedR = -900;
+            } else {
+                speedL = -900;
+                speedR = -800;
+            }
 
+            if (time > transitionTime) {
+                nextState = GOGOGO;
+            }
         } else if (state == WAITING) {
             speedL = 0;
             speedR = 0;
 
             if (time > transitionTime) {
-                transitionTime = time + 500;
                 nextState = GOGOGO;
             }
         } else {

@@ -96,6 +96,10 @@ DriveMotors(void) {
         Motor_setLeft(motorLeft);
         Motor_setRight(motorRight);
 
+        int x = abs(motorRight) + abs(motorLeft);
+        Launchpad_SetLED(LED_GREEN, x > 1000);
+        Launchpad_SetLED(LED_RED, x < 1000);
+
         OS_Sleep(10);
     }
 }
