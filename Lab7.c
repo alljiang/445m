@@ -188,19 +188,21 @@ enum ControlState {
 };
 
 #define GO_SIDE_KP 0.06
-#define GO_SIDE_KI 0.004
-#define GO_SIDE_KD 0.2
+#define GO_SIDE_KI 0.0015
+#define GO_SIDE_KD 0.3
 
 #define GO_SIDE_KI_SCALE 1000
+
+#define MAX_SENSOR_DISTANCE 8000    // bigger = more turning ability but less stability while going straightish
 
 void
 Controller(void) {
     enum ControlState state = STOP, lastState = STOP, nextState = STOP;
-    int speedL, speedR, feedForward = 0, speedForward = 850;
+    int speedL, speedR, feedForward = 0, speedForward = 950;
     int ll, lm, lr, rl, rm, rr;
 
     int side_error = 0;
-    int side_integral = 0;
+    int64_t side_integral = 0;
     int side_lastError = 0;
     int last_side_d = 0;
 
@@ -220,28 +222,28 @@ Controller(void) {
         rr = opt3101_r[2];
 
         int ll_filter, lm_filter, lr_filter, rl_filter, rm_filter, rr_filter;
-        if (ll > 5000)
-            ll_filter = 5000;
+        if (ll > MAX_SENSOR_DISTANCE)
+            ll_filter = MAX_SENSOR_DISTANCE;
         else
             ll_filter = ll;
-        if (lm > 5000)
-            lm_filter = 5000;
+        if (lm > MAX_SENSOR_DISTANCE)
+            lm_filter = MAX_SENSOR_DISTANCE;
         else
             lm_filter = lm;
-        if (lr > 5000)
-            lr_filter = 5000;
+        if (lr > MAX_SENSOR_DISTANCE)
+            lr_filter = MAX_SENSOR_DISTANCE;
         else
             lr_filter = lr;
-        if (rl > 5000)
-            rl_filter = 5000;
+        if (rl > MAX_SENSOR_DISTANCE)
+            rl_filter = MAX_SENSOR_DISTANCE;
         else
             rl_filter = rl;
-        if (rm > 5000)
-            rm_filter = 5000;
+        if (rm > MAX_SENSOR_DISTANCE)
+            rm_filter = MAX_SENSOR_DISTANCE;
         else
             rm_filter = rm;
-        if (rr > 5000)
-            rr_filter = 5000;
+        if (rr > MAX_SENSOR_DISTANCE)
+            rr_filter = MAX_SENSOR_DISTANCE;
         else
             rr_filter = rr;
         int leftSum = 0, rightSum = 0, leftAvg, rightAvg;
@@ -290,12 +292,12 @@ Controller(void) {
             int side_p = GO_SIDE_KP * side_error;
             int side_i = side_integral / GO_SIDE_KI_SCALE;
             int side_d = GO_SIDE_KD * (side_error - side_lastError);
-            last_side_d = last_side_d * 0.8 + side_d * 0.2;
+            last_side_d = last_side_d * 0.4 + side_d * 0.6;
 
 
             ST7735_Message(0, 0, "ER ", side_error);
             ST7735_Message(0, 1, "P  ", side_p);
-            ST7735_Message(0, 2, "D  ", side_d);
+            ST7735_Message(0, 2, "D  ", last_side_d);
 
             // update lastError
             side_lastError = side_error;
@@ -305,7 +307,7 @@ Controller(void) {
             side_integral = limit(side_integral, MOTOR_MIN * GO_SIDE_KI_SCALE,
             MOTOR_MAX * GO_SIDE_KI_SCALE);
 
-            int side_output = side_p + side_i + side_d;
+            int side_output = side_p + side_i + last_side_d;
             side_output = limit(side_output, MOTOR_MIN, MOTOR_MAX);
 
             speedL = addMagnitude(side_output + speedForward, feedForward);
@@ -319,13 +321,13 @@ Controller(void) {
             ST7735_PlotPoint(side_output, ST7735_WHITE);
             ST7735_PlotPoint(side_p, ST7735_GREEN);
             ST7735_PlotPoint(side_integral, ST7735_YELLOW);
-            ST7735_PlotPoint(side_d, ST7735_BLUE);
+            ST7735_PlotPoint(last_side_d, ST7735_BLUE);
             ST7735_PlotNext();
 
-            if (time > transitionTime) {
-                transitionTime = time + 100;
-                nextState = WAITING;
-            }
+//            if (time > transitionTime) {
+//                transitionTime = time + 100;
+//                nextState = WAITING;
+//            }
         } else if (state == WAITING) {
             speedL = 0;
             speedR = 0;
