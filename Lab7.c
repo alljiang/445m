@@ -84,6 +84,8 @@ extern int32_t MaxJitter;      // largest time jitter between interrupts in usec
 //---------------------ROBOT CAR STUFFS---------------------
 uint32_t opt3101_l[3];
 uint32_t opt3101_r[3];
+uint32_t opt3101_l_raw[3];
+uint32_t opt3101_r_raw[3];
 
 #define MOTOR_MAX 1000
 #define MOTOR_MIN -1000
@@ -104,6 +106,8 @@ CANSendMotor(int left, int right) {
 
     CAN0_SendData(packet_motor);
 }
+
+#define MAX_SENSOR_DISTANCE 8000    // bigger = more turning ability but less stability while going straightish
 
 void
 AcquireOPT3101(void) {
@@ -140,12 +144,19 @@ AcquireOPT3101(void) {
 
             DisableInterrupts();
             OPT3101_3_ReadMeasurement();
+
+            opt3101_l_raw[channel] = OPT3101_0_GetDistanceMillimeters() * 10; // units 0.01cm
+            opt3101_r_raw[channel] = OPT3101_3_GetDistanceMillimeters() * 10; // units 0.01cm
+
+            opt3101_l_raw[channel] = min(opt3101_l_raw[channel], MAX_SENSOR_DISTANCE);
+            opt3101_r_raw[channel] = min(opt3101_r_raw[channel], MAX_SENSOR_DISTANCE);
+
+            opt3101_l[channel] = opt3101_l[channel] * 0.6 + opt3101_l_raw[channel] * 0.4;
+            opt3101_r[channel] = opt3101_r[channel] * 0.6 + opt3101_r_raw[channel] * 0.4;
+
             EnableInterrupts();
-//
-            opt3101_l[channel] = OPT3101_0_GetDistanceMillimeters() * 10; // units 0.01cm
-            opt3101_r[channel] = OPT3101_3_GetDistanceMillimeters() * 10; // units 0.01cm
-//
-//            OS_Sleep(30); // TODO may or may not need
+
+            OS_Sleep(30); // TODO may or may not need
         }
     }
 }
@@ -184,16 +195,18 @@ Idle(void) {
 }
 
 enum ControlState {
-    STOP, GO_SIDE, WAITING
+    STOP, GOGOGO, WAITING
 };
 
-#define GO_SIDE_KP 0.06
-#define GO_SIDE_KI 0.0015
-#define GO_SIDE_KD 0.3
+#define DISTANCE_KP 0.11
+#define DISTANCE_KI 0.02
+#define DISTANCE_KD 0.30
 
-#define GO_SIDE_KI_SCALE 1000
+#define ANGLE_KP 0.05
+#define ANGLE_KI 0.0
+#define ANGLE_KD 0.0
 
-#define MAX_SENSOR_DISTANCE 8000    // bigger = more turning ability but less stability while going straightish
+#define KI_SCALE 1000
 
 void
 Controller(void) {
@@ -201,14 +214,14 @@ Controller(void) {
     int speedL, speedR, feedForward = 0, speedForward = 950;
     int ll, lm, lr, rl, rm, rr;
 
-    int side_error = 0;
-    int64_t side_integral = 0;
-    int side_lastError = 0;
-    int last_side_d = 0;
+    int distance_error = 0, angle_error = 0;
+    int64_t distance_integral = 0, angle_integral = 0;
+    int distance_lastError = 0, angle_lastError = 0;
+    int distance_lastD = 0, angle_lastD = 0;
 
     int transitionTime = 0;
 
-    ST7735_PlotClear(-300, 300);
+    ST7735_PlotClear(-500, 500);
 
     while (1) {
         int time = OS_MsTime();
@@ -221,53 +234,22 @@ Controller(void) {
         rm = opt3101_r[1];
         rr = opt3101_r[2];
 
-        int ll_filter, lm_filter, lr_filter, rl_filter, rm_filter, rr_filter;
-        if (ll > MAX_SENSOR_DISTANCE)
-            ll_filter = MAX_SENSOR_DISTANCE;
-        else
-            ll_filter = ll;
-        if (lm > MAX_SENSOR_DISTANCE)
-            lm_filter = MAX_SENSOR_DISTANCE;
-        else
-            lm_filter = lm;
-        if (lr > MAX_SENSOR_DISTANCE)
-            lr_filter = MAX_SENSOR_DISTANCE;
-        else
-            lr_filter = lr;
-        if (rl > MAX_SENSOR_DISTANCE)
-            rl_filter = MAX_SENSOR_DISTANCE;
-        else
-            rl_filter = rl;
-        if (rm > MAX_SENSOR_DISTANCE)
-            rm_filter = MAX_SENSOR_DISTANCE;
-        else
-            rm_filter = rm;
-        if (rr > MAX_SENSOR_DISTANCE)
-            rr_filter = MAX_SENSOR_DISTANCE;
-        else
-            rr_filter = rr;
+        // Calculate Average Distances
         int leftSum = 0, rightSum = 0, leftAvg, rightAvg;
-        leftSum += ll_filter + lm_filter + lr_filter;
-        rightSum += rl_filter + rm_filter + rr_filter;
+        leftSum += ll + lm + lr;
+        rightSum += rl + rm + rr;
         leftAvg = leftSum / 3;
         rightAvg = rightSum / 3;
 
-//        ST7735_Message(0, 0, "LL ", ll);
-//        ST7735_Message(0, 1, "LM ", lm);
-//        ST7735_Message(0, 2, "LR ", lr);
-//        ST7735_Message(0, 3, "RL ", rl);
-//        ST7735_Message(0, 4, "RM ", rm);
-//        ST7735_Message(0, 5, "RR ", rr);
-//        ST7735_Message(0, 6, "R  ", leftAvg);
-//        ST7735_Message(0, 7, "L  ", rightAvg);
+        // Calculate Angle Differences
+        int leftAngle = lm - ll;
+        int rightAngle = rm - rl;
 
-        if (rightAvg > leftAvg) {
-            Launchpad_SetLED(LED_RED, true);
-            Launchpad_SetLED(LED_GREEN, false);
-        } else {
-            Launchpad_SetLED(LED_RED, false);
-            Launchpad_SetLED(LED_GREEN, true);
-        }
+        Launchpad_SetLED(LED_RED, leftAngle > rightAngle);
+        Launchpad_SetLED(LED_GREEN, leftAngle < rightAngle);
+
+//        Launchpad_SetLED(LED_RED, leftDistance > rightDistance);
+//        Launchpad_SetLED(LED_GREEN, leftDistance < rightDistance);
 
         if (state == STOP) {
             speedL = 0;
@@ -276,85 +258,137 @@ Controller(void) {
             //TODO
             if (time > transitionTime) {
                 transitionTime = time + 600;
-                nextState = GO_SIDE;
+                nextState = GOGOGO;
             }
-        } else if (state == GO_SIDE) {
-            // setpoint is just 0
-//            side_error = rr - ll;
-            side_error = rightAvg - leftAvg;
+        } else if (state == GOGOGO) {
 
-            if (lastState != GO_SIDE) {
+            if (lastState != GOGOGO) {
                 // first iteration, reset some parameters
-                side_integral = 0;
-                side_lastError = side_error;
+                distance_integral = 0;
+                distance_lastD = 0;
+                distance_lastError = distance_error;
+
+                angle_integral = 0;
+                angle_lastD = 0;
+                angle_lastError = angle_error;
             }
-
-            int side_p = GO_SIDE_KP * side_error;
-            int side_i = side_integral / GO_SIDE_KI_SCALE;
-            int side_d = GO_SIDE_KD * (side_error - side_lastError);
-            last_side_d = last_side_d * 0.4 + side_d * 0.6;
-
-
-            ST7735_Message(0, 0, "ER ", side_error);
-            ST7735_Message(0, 1, "P  ", side_p);
-            ST7735_Message(0, 2, "D  ", last_side_d);
-
-            // update lastError
-            side_lastError = side_error;
-
-            // cap the I term
-            side_integral += GO_SIDE_KI * side_error;
-            side_integral = limit(side_integral, MOTOR_MIN * GO_SIDE_KI_SCALE,
-            MOTOR_MAX * GO_SIDE_KI_SCALE);
-
-            int side_output = side_p + side_i + last_side_d;
-            side_output = limit(side_output, MOTOR_MIN, MOTOR_MAX);
-
-            speedL = addMagnitude(side_output + speedForward, feedForward);
-            speedR = addMagnitude(-side_output + speedForward,
-                    feedForward + 50);
-
-            speedL = limit(speedL, MOTOR_MIN, MOTOR_MAX);
-            speedR = limit(speedR, MOTOR_MIN, MOTOR_MAX);
 
             ST7735_ClearColumn();
-            ST7735_PlotPoint(side_output, ST7735_WHITE);
-            ST7735_PlotPoint(side_p, ST7735_GREEN);
-            ST7735_PlotPoint(side_integral, ST7735_YELLOW);
-            ST7735_PlotPoint(last_side_d, ST7735_BLUE);
+
+            // ========== Layer 1 - Distance PID ==========
+            distance_error = rightAvg - leftAvg;
+
+            int distance_p = DISTANCE_KP * distance_error;
+            int distance_i = distance_integral / KI_SCALE;
+            int distance_d = DISTANCE_KD
+                    * (distance_error - distance_lastError);
+            distance_lastD = distance_lastD * 0.4 + distance_d * 0.6;
+
+            // update lastError
+            distance_lastError = distance_error;
+
+            // cap the I term
+            distance_integral += DISTANCE_KI * distance_error;
+            distance_integral = limit(distance_integral, MOTOR_MIN * KI_SCALE,
+            MOTOR_MAX * KI_SCALE);
+
+            int distance_output = distance_p + distance_i + distance_lastD;
+            distance_output = limit(distance_output, MOTOR_MIN, MOTOR_MAX);
+
+            speedL = addMagnitude(distance_output + speedForward, feedForward);
+            speedR = addMagnitude(-distance_output + speedForward,
+                    feedForward + 20);
+
+            // ========== End of Layer 1 ==========
+            // ========== Layer 2 - Angle PID ==========
+            angle_error = rightAngle - leftAngle;
+
+            int angle_p = DISTANCE_KP * angle_error;
+            int angle_i = angle_integral / KI_SCALE;
+            int angle_d = ANGLE_KD * (angle_error - angle_lastError);
+            angle_lastD = angle_lastD * 0.4 + angle_d * 0.6;
+
+            // update lastError
+            angle_lastError = angle_error;
+
+            // cap the I term
+            angle_integral += ANGLE_KI * angle_error;
+            angle_integral = limit(angle_integral, MOTOR_MIN * KI_SCALE,
+                    MOTOR_MAX * KI_SCALE);
+
+            int angle_output = angle_p + angle_i + angle_lastD;
+            angle_output = limit(angle_output, MOTOR_MIN, MOTOR_MAX);
+
+            speedL += angle_output;
+            speedR -= angle_output;
+
+            // ========== End of Layer 2 ==========
+            // ========== Debug Plotting ==========
+
+            // Distance
+//            ST7735_Message(0, 0, "ER ", distance_error);
+//            ST7735_Message(0, 1, "P  ", distance_p);
+//            ST7735_Message(0, 2, "D  ", distance_lastD);
+//            ST7735_PlotPoint(distance_output, ST7735_WHITE);
+//            ST7735_PlotPoint(distance_p, ST7735_GREEN);
+//            ST7735_PlotPoint(distance_integral, ST7735_YELLOW);
+//            ST7735_PlotPoint(distance_lastD, ST7735_BLUE);
+
+            // Angle
+            ST7735_Message(0, 0, "ER ", angle_error);
+            ST7735_Message(0, 1, "P  ", angle_p);
+            ST7735_Message(0, 2, "D  ", angle_lastD);
+            ST7735_PlotPoint(angle_output, ST7735_WHITE);
+            ST7735_PlotPoint(angle_p, ST7735_GREEN);
+            ST7735_PlotPoint(angle_integral, ST7735_YELLOW);
+            ST7735_PlotPoint(angle_lastD, ST7735_BLUE);
+
+            // Distance + Angle
+//            ST7735_Message(0, 0, "D ER ", angle_error);
+//            ST7735_Message(0, 1, "A ER ", angle_error);
+//            ST7735_PlotPoint(distance_output, ST7735_GREEN);
+//            ST7735_PlotPoint(distance_error, ST7735_MAGENTA);
+//            ST7735_PlotPoint(angle_output, ST7735_BLUE);
+//            ST7735_PlotPoint(angle_error, ST7735_CYAN);
+
+            // ======= End of Debug Plotting =======
+
             ST7735_PlotNext();
 
 //            if (time > transitionTime) {
-//                transitionTime = time + 100;
+//                transitionTime = time + 300;
 //                nextState = WAITING;
 //            }
+
         } else if (state == WAITING) {
             speedL = 0;
             speedR = 0;
 
             if (time > transitionTime) {
-                transitionTime = time + 800;
-                nextState = GO_SIDE;
+                transitionTime = time + 500;
+                nextState = GOGOGO;
             }
         } else {
             while (1);
         }
 
-        UART_OutStringNonBlock("ll: ");
-        UART_OutUDecNonBlock(ll);
-        UART_OutStringNonBlock("\trr: ");
-        UART_OutUDecNonBlock(rr);
-        UART_OutStringNonBlock("\tl: ");
-        UART_OutUDecNonBlock(leftAvg);
-        UART_OutStringNonBlock("\tr: ");
-        UART_OutUDecNonBlock(rightAvg);
-        UART_OutStringNonBlock("\tL: ");
-        UART_OutUDecNonBlock(speedL);
-        UART_OutStringNonBlock("\tR: ");
-        UART_OutUDecNonBlock(speedR);
-        UART_OutStringNonBlock("\r\n");
+//        UART_OutStringNonBlock("ll: ");
+//        UART_OutUDecNonBlock(ll);
+//        UART_OutStringNonBlock("\trr: ");
+//        UART_OutUDecNonBlock(rr);
+//        UART_OutStringNonBlock("\tl: ");
+//        UART_OutUDecNonBlock(leftAvg);
+//        UART_OutStringNonBlock("\tr: ");
+//        UART_OutUDecNonBlock(rightAvg);
+//        UART_OutStringNonBlock("\tL: ");
+//        UART_OutUDecNonBlock(speedL);
+//        UART_OutStringNonBlock("\tR: ");
+//        UART_OutUDecNonBlock(speedR);
+//        UART_OutStringNonBlock("\r\n");
 
-        CANSendMotor(speedL, speedR);
+        speedL = limit(speedL, MOTOR_MIN, MOTOR_MAX);
+        speedR = limit(speedR, MOTOR_MIN, MOTOR_MAX);
+//        CANSendMotor(speedL, speedR);
 
         lastState = state;
         state = nextState;
@@ -364,7 +398,7 @@ Controller(void) {
 
 void
 Halt(void) {
-    while(1) {
+    while (1) {
         CANSendMotor(0, 0);
     }
 }
