@@ -1581,12 +1581,17 @@ void ST7735_PlotClear(int32_t ymin, int32_t ymax){
   X = 0;
 }
 
+void ST7735_ClearColumn() {
+    ST7735_DrawFastVLine(X, 32, 159, ST7735_Color565(228,228,228));
+    ST7735_DrawFastVLine(X+1, 32, 159, ST7735_Color565(228,228,228));
+}
+
 // *************** ST7735_PlotPoint ********************
 // Used in the voltage versus time plot, plot one point at y
 // It does output to display
 // Inputs: y is the y coordinate of the point plotted
 // Outputs: none
-void ST7735_PlotPoint(int32_t y){int32_t j;
+void ST7735_PlotPoint(int32_t y, int32_t color){int32_t j;
   if(y<Ymin) y=Ymin;
   if(y>Ymax) y=Ymax;
   // X goes from 0 to 127
@@ -1596,10 +1601,11 @@ void ST7735_PlotPoint(int32_t y){int32_t j;
   j = 32+(127*(Ymax-y))/Yrange;
   if(j<32) j = 32;
   if(j>159) j = 159;
-  ST7735_DrawPixel(X,   j,   ST7735_BLUE);
-  ST7735_DrawPixel(X+1, j,   ST7735_BLUE);
-  ST7735_DrawPixel(X,   j+1, ST7735_BLUE);
-  ST7735_DrawPixel(X+1, j+1, ST7735_BLUE);
+  ST7735_DrawPixel(X, 96, ST7735_RED);
+  ST7735_DrawPixel(X,   j,   color);
+  ST7735_DrawPixel(X+1, j,   color);
+  ST7735_DrawPixel(X,   j+1, color);
+  ST7735_DrawPixel(X+1, j+1, color);
 }
 // *************** ST7735_PlotLine ********************
 // Used in the voltage versus time plot, plot line to new point
@@ -1675,7 +1681,7 @@ int32_t j;
   // y=Ymin maps to j=159
   j = 32+(127*(Ymax-y))/Yrange;
   ST7735_DrawFastVLine(X, j, 159-j, ST7735_BLACK);
-
+  ST7735_DrawFastVLine(X, 32, j-32, ST7735_Color565(228,228,228));
 }
 
 // full scaled defined as 3V
@@ -1734,10 +1740,11 @@ int32_t j;
 // Inputs: none
 // Outputs: none
 void ST7735_PlotNext(void){
-  if(X==127){
+  if(X>=127){
     X = 0;
   } else{
-    X++;
+      X++;
+      X++;
   }
 }
 

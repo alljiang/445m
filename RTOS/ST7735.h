@@ -378,12 +378,13 @@ void ST7735_InvertDisplay(int i) ;
 // Outputs: none
 void ST7735_PlotClear(int32_t ymin, int32_t ymax);
 
+void ST7735_ClearColumn();
 // *************** ST7735_PlotPoint ********************
 // Used in the voltage versus time plot, plot one point at y
 // It does output to display
 // Inputs: y is the y coordinate of the point plotted
 // Outputs: none
-void ST7735_PlotPoint(int32_t y);
+void ST7735_PlotPoint(int32_t y, int32_t color);
 
 // *************** ST7735_PlotLine ********************
 // Used in the voltage versus time plot, plot line to new point

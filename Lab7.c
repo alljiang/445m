@@ -111,10 +111,10 @@ AcquireOPT3101(void) {
     while (1) {
         int n = 1, i;
 
-        for (i = 0; i < 3*n; i++) {
+        for (i = 0; i < 3 * n; i++) {
             int channel = 0;
             if (i >= n) channel = 1;
-            if (i >= 2*n) channel = 2;
+            if (i >= 2 * n) channel = 2;
 
             DisableInterrupts();
             OPT3101_0_StartMeasurementChannel(channel);
@@ -184,28 +184,29 @@ Idle(void) {
 }
 
 enum ControlState {
-        STOP,
-        GO_SIDE,
-        WAITING
+    STOP, GO_SIDE, WAITING
 };
 
-#define GO_SIDE_KP 0.1
-#define GO_SIDE_KI 0
-#define GO_SIDE_KD 0.5
+#define GO_SIDE_KP 0.06
+#define GO_SIDE_KI 0.004
+#define GO_SIDE_KD 0.2
 
 #define GO_SIDE_KI_SCALE 1000
 
 void
 Controller(void) {
     enum ControlState state = STOP, lastState = STOP, nextState = STOP;
-    int speedL, speedR, feedForward = 0, speedForward = 900;
+    int speedL, speedR, feedForward = 0, speedForward = 850;
     int ll, lm, lr, rl, rm, rr;
 
     int side_error = 0;
     int side_integral = 0;
     int side_lastError = 0;
+    int last_side_d = 0;
 
     int transitionTime = 0;
+
+    ST7735_PlotClear(-300, 300);
 
     while (1) {
         int time = OS_MsTime();
@@ -218,17 +219,47 @@ Controller(void) {
         rm = opt3101_r[1];
         rr = opt3101_r[2];
 
-        int minLeft = min(min(ll, lm), lr);
-        int minRight = min(min(rl, rm), rr);
+        int ll_filter, lm_filter, lr_filter, rl_filter, rm_filter, rr_filter;
+        if (ll > 5000)
+            ll_filter = 5000;
+        else
+            ll_filter = ll;
+        if (lm > 5000)
+            lm_filter = 5000;
+        else
+            lm_filter = lm;
+        if (lr > 5000)
+            lr_filter = 5000;
+        else
+            lr_filter = lr;
+        if (rl > 5000)
+            rl_filter = 5000;
+        else
+            rl_filter = rl;
+        if (rm > 5000)
+            rm_filter = 5000;
+        else
+            rm_filter = rm;
+        if (rr > 5000)
+            rr_filter = 5000;
+        else
+            rr_filter = rr;
+        int leftSum = 0, rightSum = 0, leftAvg, rightAvg;
+        leftSum += ll_filter + lm_filter + lr_filter;
+        rightSum += rl_filter + rm_filter + rr_filter;
+        leftAvg = leftSum / 3;
+        rightAvg = rightSum / 3;
 
-        ST7735_Message(0, 0, "LL ", ll);
-        ST7735_Message(0, 1, "LM ", lm);
-        ST7735_Message(0, 2, "LR ", lr);
-        ST7735_Message(0, 3, "RL ", rl);
-        ST7735_Message(0, 4, "RM ", rm);
-        ST7735_Message(0, 5, "RR ", rr);
+//        ST7735_Message(0, 0, "LL ", ll);
+//        ST7735_Message(0, 1, "LM ", lm);
+//        ST7735_Message(0, 2, "LR ", lr);
+//        ST7735_Message(0, 3, "RL ", rl);
+//        ST7735_Message(0, 4, "RM ", rm);
+//        ST7735_Message(0, 5, "RR ", rr);
+//        ST7735_Message(0, 6, "R  ", leftAvg);
+//        ST7735_Message(0, 7, "L  ", rightAvg);
 
-        if (rr > ll) {
+        if (rightAvg > leftAvg) {
             Launchpad_SetLED(LED_RED, true);
             Launchpad_SetLED(LED_GREEN, false);
         } else {
@@ -247,8 +278,8 @@ Controller(void) {
             }
         } else if (state == GO_SIDE) {
             // setpoint is just 0
-            side_error = rr - ll;
-//            side_error = minRight - minLeft;
+//            side_error = rr - ll;
+            side_error = rightAvg - leftAvg;
 
             if (lastState != GO_SIDE) {
                 // first iteration, reset some parameters
@@ -259,25 +290,40 @@ Controller(void) {
             int side_p = GO_SIDE_KP * side_error;
             int side_i = side_integral / GO_SIDE_KI_SCALE;
             int side_d = GO_SIDE_KD * (side_error - side_lastError);
+            last_side_d = last_side_d * 0.8 + side_d * 0.2;
+
+
+            ST7735_Message(0, 0, "ER ", side_error);
+            ST7735_Message(0, 1, "P  ", side_p);
+            ST7735_Message(0, 2, "D  ", side_d);
 
             // update lastError
             side_lastError = side_error;
 
             // cap the I term
             side_integral += GO_SIDE_KI * side_error;
-            side_integral = limit(side_integral, MOTOR_MIN * GO_SIDE_KI_SCALE, MOTOR_MAX * GO_SIDE_KI_SCALE);
+            side_integral = limit(side_integral, MOTOR_MIN * GO_SIDE_KI_SCALE,
+            MOTOR_MAX * GO_SIDE_KI_SCALE);
 
             int side_output = side_p + side_i + side_d;
             side_output = limit(side_output, MOTOR_MIN, MOTOR_MAX);
 
             speedL = addMagnitude(side_output + speedForward, feedForward);
-            speedR = addMagnitude(-side_output + speedForward, feedForward + 40);
+            speedR = addMagnitude(-side_output + speedForward,
+                    feedForward + 50);
 
             speedL = limit(speedL, MOTOR_MIN, MOTOR_MAX);
             speedR = limit(speedR, MOTOR_MIN, MOTOR_MAX);
 
+            ST7735_ClearColumn();
+            ST7735_PlotPoint(side_output, ST7735_WHITE);
+            ST7735_PlotPoint(side_p, ST7735_GREEN);
+            ST7735_PlotPoint(side_integral, ST7735_YELLOW);
+            ST7735_PlotPoint(side_d, ST7735_BLUE);
+            ST7735_PlotNext();
+
             if (time > transitionTime) {
-                transitionTime = time + 200;
+                transitionTime = time + 100;
                 nextState = WAITING;
             }
         } else if (state == WAITING) {
@@ -285,16 +331,21 @@ Controller(void) {
             speedR = 0;
 
             if (time > transitionTime) {
-                transitionTime = time + 600;
+                transitionTime = time + 800;
                 nextState = GO_SIDE;
             }
         } else {
             while (1);
         }
 
+        UART_OutStringNonBlock("ll: ");
         UART_OutUDecNonBlock(ll);
-        UART_OutStringNonBlock("\t");
+        UART_OutStringNonBlock("\trr: ");
         UART_OutUDecNonBlock(rr);
+        UART_OutStringNonBlock("\tl: ");
+        UART_OutUDecNonBlock(leftAvg);
+        UART_OutStringNonBlock("\tr: ");
+        UART_OutUDecNonBlock(rightAvg);
         UART_OutStringNonBlock("\tL: ");
         UART_OutUDecNonBlock(speedL);
         UART_OutStringNonBlock("\tR: ");
@@ -309,6 +360,13 @@ Controller(void) {
     }
 }
 
+void
+Halt(void) {
+    while(1) {
+        CANSendMotor(0, 0);
+    }
+}
+
 int
 realmain(void) { // realmain
     OS_Init();        // initialize, disable interrupts
@@ -316,6 +374,7 @@ realmain(void) { // realmain
     CAN0_Open(RCV_ID, XMT_ID);
 
 //    OS_AddPeriodicThread(&, 80000000 / 20, 2);   // 20 Hz
+    OS_AddSW2Task(&Halt, 1);
 
     // create initial foreground threads
     NumCreated = 0;
@@ -335,7 +394,7 @@ main(void) { 			// main
     PLL_Init(Bus80MHz);
     GPIO_Initialize();
     Launchpad_PortFInitialize();
-    ST7735_InitR(INITR_GREENTAB);             // LCD initialization
+    ST7735_InitR(INITR_REDTAB);             // LCD initialization
     UART_Init();                              // serial I/O for interpreter
 
     I2C0_Init(200000, 80000000);
