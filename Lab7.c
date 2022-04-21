@@ -124,9 +124,9 @@ enum ControlState {
     STOP, GOGOGO, WAITING, CRASHED
 };
 
-#define DISTANCE_KP 0.12
+#define DISTANCE_KP 0.09
 #define DISTANCE_KI 0.0017
-#define DISTANCE_KD 0.15
+#define DISTANCE_KD 0.17
 
 #define ANGLE_KP 0.0
 #define ANGLE_KI 0.0
@@ -135,7 +135,7 @@ enum ControlState {
 #define KI_SCALE 1000
 
 #define CRASH_DETECT_THRESHOLD 80
-#define CRASH_DETECT_TIME 500
+#define CRASH_DETECT_TIME 800
 
 char *str_ll = "ll: ";
 char *str_lm = "lm: ";
@@ -157,7 +157,7 @@ printTelemetryScreen() {
 void
 Controller(void) {
     enum ControlState state = GOGOGO, lastState = STOP, nextState = GOGOGO;
-    int speedL, speedR, feedForward = 0, speedForward = 800;
+    int speedL, speedR, feedForward = 0, speedForward = 850;
     int ll, lm, lr, rl, rm, rr;
 
     int distance_error = 0;
@@ -253,7 +253,7 @@ Controller(void) {
                 // crash detected!
                 crashedOnLeftSide = distance_error > 0;
 
-                transitionTime = time + 700;
+                transitionTime = time + 900;
                 nextState = CRASHED;
                 Launchpad_SetLED(LED_BLUE, true);
                 Launchpad_SetLED(LED_RED, false);
@@ -264,15 +264,15 @@ Controller(void) {
             // ========== Debug Plotting ==========
 
             // Distance
-//            ST7735_Message(0, 0, "ER ", distance_error);
-//            ST7735_Message(0, 1, "P  ", distance_p);
-//            ST7735_Message(0, 2, "D  ", distance_lastD);
-//            ST7735_PlotPoint(distance_output, ST7735_WHITE);
-//            ST7735_PlotPoint(distance_p, ST7735_GREEN);
-//            ST7735_PlotPoint(distance_integral, ST7735_YELLOW);
-//            ST7735_PlotPoint(distance_lastD, ST7735_BLUE);
-            ST7735_Message(0, 2, "DE  ", distance_dErrorFiltered);
-            ST7735_PlotPoint(distance_dErrorFiltered, ST7735_BLUE);
+            ST7735_Message(0, 0, "ER ", distance_error);
+            ST7735_Message(0, 1, "P  ", distance_p);
+            ST7735_Message(0, 2, "D  ", distance_lastD);
+            ST7735_PlotPoint(distance_output, ST7735_WHITE);
+            ST7735_PlotPoint(distance_p, ST7735_GREEN);
+            ST7735_PlotPoint(distance_integral, ST7735_YELLOW);
+            ST7735_PlotPoint(distance_lastD, ST7735_BLUE);
+//            ST7735_Message(0, 2, "DE  ", distance_dErrorFiltered);
+//            ST7735_PlotPoint(distance_dErrorFiltered, ST7735_BLUE);
 
             // ======= End of Debug Plotting =======
 
