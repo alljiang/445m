@@ -1,0 +1,8 @@
+{
+    "files.associations": {
+        "*.x": "linkerscript",
+        "array": "c",
+        "string": "c",
+        "string_view": "c"
+    }
+}

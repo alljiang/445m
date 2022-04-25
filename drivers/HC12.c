@@ -22,12 +22,11 @@ Delay1ms(uint32_t n);
 const char AT_HEADER[] = "AT+";
 const char AT_DEFAULT[] = "DEFAULT";
 const char AT_BAUD[] = "B9600";
+const char AT_CHANNEL[] = "C002";
 
 extern uint8_t rxBuffer[100];
+extern uint8_t rxBufferStart;
 extern uint8_t rxBufferLength;
-
-extern void
-ProcessHC12RxBuffer(void);
 
 void
 UART1_OutString(const char *str) {
@@ -70,26 +69,22 @@ UART1_Handler() {
 
     while (UARTCharsAvail(UART1_BASE)) {
         uint8_t rx = (uint8_t) UARTCharGet(UART1_BASE);
-        rxBuffer[rxBufferLength++] = rx;
 
-//        if (rx == 4) {  // EOT
-//            // chk
-//
-//            ProcessHC12RxBuffer();
-//
-//            rxBufferLength = 0;
-//        }
+        if (rxBufferLength < sizeof(rxBuffer)) {
+            rxBuffer[(rxBufferStart + rxBufferLength) % sizeof(rxBuffer)] = rx;
+            rxBufferLength++;
+        }
     }
 
-    // Null terminator
-    rxBuffer[rxBufferLength] = 0;
-    ProcessHC12RxBuffer();
 }
 
 void
 HC12_Initialize() {
     SysCtlPeripheralEnable(SYSCTL_PERIPH_UART1);
     while (!SysCtlPeripheralReady(SYSCTL_PERIPH_UART1));
+
+    rxBufferStart = 0;
+    rxBufferLength = 0;
 
     GPIOPinConfigure(GPIO_PC5_U1TX);
     GPIOPinConfigure(GPIO_PC4_U1RX);
@@ -115,13 +110,48 @@ HC12_Initialize() {
     Delay1ms(500);
 
     HC12_SendATCommand(AT_BAUD);
+    Delay1ms(300);
+    HC12_SendATCommand("V");
+    Delay1ms(300);
+    HC12_SendATCommand(AT_CHANNEL);
 
     Delay1ms(500);
 
     GPIOPinWrite(GPIO_PORTD_BASE, GPIO_PIN_2, GPIO_PIN_2);
 
-    uint8_t c = UARTCharGet(UART1_BASE);
     // Allow HC12 to exit command mode
     Delay1ms(200);
 
+}
+
+/*
+ * [0]: HEADER ( Range [0, 15] )
+ * [1]: DATA
+ * [2]: DATA
+ * [3]: DATA
+ * [4]: DATA
+ * [5]: XOR CHECKSUM
+ */
+void
+HC12_SendData(uint8_t header, uint8_t *data) {
+    if (header > 15) {
+        return;
+    }
+
+    // calculate checksum
+    uint8_t checksum = header;
+    for (int i = 0; i < 4; i++) {
+        checksum ^= data[i];
+    }
+
+    // send header
+    UARTCharPut(UART1_BASE, header);
+
+    // send data
+    for (int i = 0; i < 4; i++) {
+        UARTCharPut(UART1_BASE, data[i]);
+    }
+
+    // send checksum
+    UARTCharPut(UART1_BASE, checksum);
 }

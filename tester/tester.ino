@@ -14,16 +14,19 @@ SoftwareSerial hc12(HC12TXPin, HC12RXPin); //tx, rx
 
 void setup() {
   pinMode(HC12SetPin, OUTPUT);
-  digitalWrite(HC12SetPin, LOW);
+//  digitalWrite(HC12SetPin, LOW);
   Serial.begin(receiveBaud);
-  hc12.begin(initialHC12Baud);
+//  hc12.begin(initialHC12Baud);
   delay(500);
   Serial.println("Receiver connected");
-  hc12.print(("AT+B"+String(sendBaud)));
-  hc12.begin(sendBaud);
-  delay(100);
-  hc12.flush();
-  Serial.println(hc12.readString());
+//  hc12.print(("AT+B"+String(sendBaud)));
+//  delay(100);
+//  hc12.print(("AT+V"));
+//  delay(100);
+//  hc12.print(("AT+C002"));
+//  delay(100);
+//  hc12.flush();
+//  Serial.println(hc12.readString());
   digitalWrite(HC12SetPin, HIGH);
 }
 

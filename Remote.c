@@ -83,6 +83,7 @@
 #include <stdint.h>
 #include <string.h> 
 #include <stdio.h>
+#include <stdbool.h>
 #include "vware/tm4c123gh6pm.h"
 #include "vware/CortexM.h"
 #include "vware/LaunchPad.h"
@@ -109,33 +110,122 @@
 uint32_t NumCreated;   // number of foreground threads created
 
 uint8_t rxBuffer[100];
+uint8_t rxBufferStart;
 uint8_t rxBufferLength;
+
+uint32_t joystickH, joystickV, triggerL, triggerR;
+bool btnA, btnB, btnStart;
+
+/*
+ * [0]: HEADER ( Range [0, 15] )
+ * [1]: DATA
+ * [2]: DATA
+ * [3]: DATA
+ * [4]: DATA
+ * [5]: XOR CHECKSUM
+ *
+ * Remote -> Car
+ * Heartbeat: [0, 0x12, 0x34, 0x56, 0x78]
+ * Set Motor Speed: [2, <Left Upper 8 bits>, <Left Lower 8 bits>, <Right Upper 8 bits>, <Right Lower 8 bits>
+ * Set Driving Mode: [3, 0x21, 0x32, 0x43, 0x54]
+ * Set Wall Following Mode: [3, 0x65, 0x76, 0x87, 0x98]
+ *
+ *
+ *
+ *
+ *
+ *
+ *
+ * Car -> Remote
+ * Heartbeat: [1, 0x9A, 0xBC, 0xDE, 0xF0]
+ */
 
 void
 ProcessHC12RxBuffer() {
-    UART_OutStringNonBlock((char*) rxBuffer);
+    while (1) {
+        while (rxBufferLength >= 6) {
+//            DisableInterrupts();
+            uint8_t header = rxBuffer[(rxBufferStart + 0) % sizeof(rxBuffer)];
+
+            // verify header
+            if (header > 15) {
+                // invalid header, skip
+                rxBufferStart = (rxBufferStart + 1) % sizeof(rxBuffer); // increment start
+                rxBufferLength--;
+                continue;
+            }
+
+            uint8_t checksum = rxBuffer[(rxBufferStart + 5) % sizeof(rxBuffer)];
+
+            // calculate xor checksum
+            uint8_t xorChecksum = header;
+            for (int i = 1; i < 5; i++) {
+                xorChecksum ^= rxBuffer[(rxBufferStart + i) % sizeof(rxBuffer)];
+            }
+
+            if (xorChecksum != checksum) {
+                // checksum failed, skip
+                rxBufferStart = (rxBufferStart + 1) % sizeof(rxBuffer); // increment start
+                rxBufferLength--;
+                continue;
+            }
+//            EnableInterrupts();
+
+            UART_OutChar(header);
+            UART_OutChar(rxBuffer[(rxBufferStart + 1) % sizeof(rxBuffer)]);
+            UART_OutChar(rxBuffer[(rxBufferStart + 2) % sizeof(rxBuffer)]);
+            UART_OutChar(rxBuffer[(rxBufferStart + 3) % sizeof(rxBuffer)]);
+            UART_OutChar(rxBuffer[(rxBufferStart + 4) % sizeof(rxBuffer)]);
+            UART_OutChar('\r');
+            UART_OutChar('\n');
+        }
+
+        uint8_t dataTest[4] = {12, 14, 52, 63};
+        HC12_SendData(10, dataTest);
+
+        OS_Sleep(1000);
+    }
 }
 
 void
 HumanInputsTask(void) {
     // BTN A: PB0
     // BTN B: PB1
-    // Joystick H: PD0 (ch7)
-    // Joystick V: PD1 (ch6)
+    // BTN Start: PA5
+    // Joystick H: PD0 (ADC CH7)
+    // Joystick V: PD1 (ADC CH6)
+    // Trigger L: PE1 (ADC CH2)
+    // Trigger R: PE2 (ADC CH1)
 
-    // set PB0 and PB1 to inputs
+    uint32_t joystickH_raw, joystickV_raw, triggerL_raw, triggerR_raw;
+
+    // Set buttons to inputs
     GPIO_PORTB_DEN_R = set_bit_field_u32(GPIO_PORTB_DEN_R, 0, 2, 0b11);
     GPIO_PORTB_DIR_R = set_bit_field_u32(GPIO_PORTB_DIR_R, 0, 2, 0b00);
+    GPIO_PORTA_DEN_R = set_bit_field_u32(GPIO_PORTA_DEN_R, 5, 1, 0b1);
+    GPIO_PORTA_DIR_R = set_bit_field_u32(GPIO_PORTA_DIR_R, 5, 1, 0b0);
 
-    while(1) {
+    while (1) {
         ADC_Init(7);
-        uint32_t joystickH = ADC_In();
+        joystickH_raw = ADC_In();
 
         ADC_Init(6);
-        uint32_t joystickV = ADC_In();
+        joystickV_raw = ADC_In();
 
-        bool btnA = GPIO_PORTB_DATA_R &  generate_bit_mask_u32(0, 1);
-        bool btnB = GPIO_PORTB_DATA_R &  generate_bit_mask_u32(1, 1);
+        ADC_Init(2);
+        triggerL_raw = ADC_In();
+
+        ADC_Init(1);
+        triggerR_raw = ADC_In();
+
+        btnA = GPIO_PORTB_DATA_R & generate_bit_mask_u32(0, 1);
+        btnB = GPIO_PORTB_DATA_R & generate_bit_mask_u32(1, 1);
+        btnStart = GPIO_PORTB_DATA_R & generate_bit_mask_u32(5, 1);
+
+        joystickH = joystickH_raw;
+        joystickV = joystickV_raw;
+        triggerL = triggerL_raw;
+        triggerR = triggerR_raw;
 
         OS_Sleep(20);
     }
@@ -169,6 +259,7 @@ realmain(void) {        // lab 4 real main
     NumCreated += OS_AddThread(&Interpreter, 128, 4);
     NumCreated += OS_AddThread(&HumanInputsTask, 128, 3);
     NumCreated += OS_AddThread(&ScreenDisplayTask, 128, 4);
+    NumCreated += OS_AddThread(&ProcessHC12RxBuffer, 128, 2);
     NumCreated += OS_AddThread(&Idle, 128, 5); // runs when nothing useful to do
 
     OS_Launch(TIMESLICE); // doesn't return, interrupts enabled in here
@@ -177,7 +268,7 @@ realmain(void) {        // lab 4 real main
 
 //*******************Trampoline for selecting main to execute**********
 int
-main(void) { 			// main
+main(void) {            // main
     PLL_Init(Bus80MHz);
     GPIO_Initialize();
     Launchpad_PortFInitialize();

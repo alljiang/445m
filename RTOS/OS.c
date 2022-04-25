@@ -1078,4 +1078,3 @@ OS_RedirectToST7735(void) {
 
     return 1;
 }
-
