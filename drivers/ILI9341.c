@@ -43,8 +43,6 @@ extern void
 Delay1ms(uint32_t n);
 
 void
-beginSPITransaction();
-void
 endSPITransaction();
 
 Sema4Type SPIFree;       // used for mutual exclusion
@@ -342,10 +340,6 @@ ILI9341_SetColor(uint32_t rgb) {
 
      */
 
-    // 16-bit, 5-6-5
-    //    uint8_t r = (rgb & 0xF80000) >> 19;
-    //    uint8_t g = (rgb & 0x00FC00) >> 10;
-    //    uint8_t b = (rgb & 0x0000F8) >> 3;
     uint8_t r = (rgb & 0xF80000) >> 19;
     uint8_t g = (rgb & 0x00FC00) >> 10;
     uint8_t b = (rgb & 0x0000F8) >> 3;
@@ -474,7 +468,7 @@ void
 ILI9341_DrawPixel(uint32_t x, uint32_t y, uint32_t rgb) {
     if ((x > ILI9341_TFTWIDTH) || (y > ILI9341_TFTHEIGHT)) return;
 
-    beginSPITransaction();
+
 
     ILI9341_SetCoords(x, y, x, y);
 
@@ -490,7 +484,7 @@ ILI9341_DrawHLine(uint32_t x, uint32_t y, uint32_t l, uint32_t rgb) {
     if ((x > ILI9341_TFTWIDTH) || (y > ILI9341_TFTHEIGHT)) return;
     if (x + l > ILI9341_TFTWIDTH) l = ILI9341_TFTWIDTH - x;
 
-    beginSPITransaction();
+
 
     ILI9341_SetCoords(x, y, x + l, y);
 
@@ -507,7 +501,7 @@ ILI9341_DrawVLine(uint32_t x, uint32_t y, uint32_t l, uint32_t rgb) {
     if ((x > ILI9341_TFTWIDTH) || (y > ILI9341_TFTHEIGHT)) return;
     if (y + l > ILI9341_TFTHEIGHT) l = ILI9341_TFTHEIGHT - y;
 
-    beginSPITransaction();
+
 
     ILI9341_SetCoords(x, y, x, y + l);
 
@@ -525,7 +519,7 @@ ILI9341_DrawColors(uint32_t x, uint32_t y, int32_t *rgbArr,
 
     if (x + totalPixels > ILI9341_TFTWIDTH) totalPixels = ILI9341_TFTWIDTH - x;
 
-    beginSPITransaction();
+
 
     ILI9341_SetCoords(x, y, x + totalPixels, y);
 
@@ -549,7 +543,7 @@ ILI9341_DrawHLineMulticolored(uint32_t x, uint32_t y, uint32_t *rgb,
 
     if (x + l >= ILI9341_TFTWIDTH) l = ILI9341_TFTWIDTH - x - 1;
 
-    beginSPITransaction();
+
 
     ILI9341_SetCoords(x, y, x + l, y);
 
@@ -572,7 +566,6 @@ ILI9341_FillRect(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint32_t rgb) {
     if (x + w >= ILI9341_TFTWIDTH) w = ILI9341_TFTWIDTH - x;
     if (y + h >= ILI9341_TFTHEIGHT) h = ILI9341_TFTHEIGHT - y;
 
-    beginSPITransaction();
 
     ILI9341_SetCoords(x, y, x + w, y + h);
 
@@ -668,10 +661,6 @@ ILI9341_Message(uint32_t d, uint32_t l, char *pt, int32_t value) {
 void
 ILI9341_FillScreen(uint32_t rgb) {
     ILI9341_FillRect(0, 0, ILI9341_TFTWIDTH, ILI9341_TFTHEIGHT, rgb);
-}
-
-void
-beginSPITransaction(void) {
 }
 
 void

@@ -69,7 +69,7 @@ UART1_Handler() {
     UARTIntClear(UART1_BASE, UART_INT_RX);
 
     while (UARTCharsAvail(UART1_BASE)) {
-        uint8_t rx = (uint8_t) UARTCharGet(UART4_BASE);
+        uint8_t rx = (uint8_t) UARTCharGet(UART1_BASE);
         rxBuffer[rxBufferLength++] = rx;
 
 //        if (rx == 4) {  // EOT
@@ -91,9 +91,9 @@ HC12_Initialize() {
     SysCtlPeripheralEnable(SYSCTL_PERIPH_UART1);
     while (!SysCtlPeripheralReady(SYSCTL_PERIPH_UART1));
 
-    ROM_GPIOPinConfigure(GPIO_PC5_U1TX);
-    ROM_GPIOPinConfigure(GPIO_PC4_U1RX);
-    ROM_GPIOPinTypeUART(GPIO_PORTC_BASE, GPIO_PIN_4 | GPIO_PIN_5);
+    GPIOPinConfigure(GPIO_PC5_U1TX);
+    GPIOPinConfigure(GPIO_PC4_U1RX);
+    GPIOPinTypeUART(GPIO_PORTC_BASE, GPIO_PIN_4 | GPIO_PIN_5);
 
     UARTConfigSetExpClk(UART1_BASE, SysCtlClockGet(), 9600,
             (UART_CONFIG_WLEN_8 | UART_CONFIG_STOP_ONE |
@@ -102,17 +102,21 @@ HC12_Initialize() {
     UARTIntRegister(UART1_BASE, &UART1_Handler);
     HC12_EnableRXInts();
 
+    UARTEnable(UART1_BASE);
+
     rxBufferLength = 0;
 
     GPIOPinTypeGPIOOutput(GPIO_PORTD_BASE, GPIO_PIN_2);
 
-    // Let HC12 boot up first
-    Delay1ms(10);
-
     // Set to command mode
     GPIOPinWrite(GPIO_PORTD_BASE, GPIO_PIN_2, 0);
 
+    // Let HC12 boot up first
+    Delay1ms(500);
+
     HC12_SendATCommand(AT_BAUD);
+
+    Delay1ms(500);
 
     GPIOPinWrite(GPIO_PORTD_BASE, GPIO_PIN_2, GPIO_PIN_2);
 
