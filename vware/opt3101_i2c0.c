@@ -395,6 +395,7 @@ uint32_t *PTxChan_0;
 uint32_t *Pdistances_0;
 uint32_t *Pamplitudes_0;
 uint32_t ChannelCount_0[3]; // debugging monitor
+#define MAX_SENSOR_DISTANCE 900
 
 uint32_t
 OPT3101_0_GetMeasurement(uint32_t distances[3], uint32_t amplitudes[3]) {
@@ -422,7 +423,11 @@ OPT3101_0_GetMeasurement(uint32_t distances[3], uint32_t amplitudes[3]) {
     GPIO_PORTC_ICR_R = 0x10;
     if (channel <= 2) {
         ChannelCount_0[channel]++;
-        distances[channel] = distance;
+
+//        distances[channel] = distance;
+        if (distance > MAX_SENSOR_DISTANCE) distance = MAX_SENSOR_DISTANCE;
+        distances[channel] = distances[channel] * 0.7 + distance * 0.3;
+
         amplitudes[channel] = amplitude;
     }
     return channel;

@@ -108,7 +108,7 @@ CANSendMotor(int left, int right) {
     CAN0_SendData(packet_motor);
 }
 
-#define MAX_SENSOR_DISTANCE 800    // bigger = more turning ability but less stability while going straightish
+#define MAX_SENSOR_DISTANCE 900    // bigger = more turning ability but less stability while going straightish
 
 void
 Idle(void) {
@@ -124,9 +124,9 @@ enum ControlState {
     STOP, GOGOGO, WAITING, CRASHED
 };
 
-#define DISTANCE_KP 0.09
+#define DISTANCE_KP 0.1
 #define DISTANCE_KI 0.002
-#define DISTANCE_KD 0.1
+#define DISTANCE_KD 0.03
 
 #define ANGLE_KP 0.0
 #define ANGLE_KI 0.0
@@ -146,18 +146,37 @@ char *str_rr = "rr: ";
 
 void
 printTelemetryScreen() {
-    ST7735_Message(0, 0, str_ll, Distances_0[0]);
+    ST7735_Message(0, 0, str_ll, Distances_0[2]);
     ST7735_Message(0, 1, str_lm, Distances_0[1]);
-    ST7735_Message(0, 2, str_lr, Distances_0[2]);
-    ST7735_Message(0, 3, str_rl, Distances_1[0]);
+    ST7735_Message(0, 2, str_lr, Distances_0[0]);
+    ST7735_Message(0, 3, str_rl, Distances_1[2]);
     ST7735_Message(0, 4, str_rightm, Distances_1[1]);
-    ST7735_Message(0, 5, str_rr, Distances_1[2]);
+    ST7735_Message(0, 5, str_rr, Distances_1[0]*2);
+
+    // get sensor readings
+    int ll = min(Distances_1[2], MAX_SENSOR_DISTANCE);
+    int lm = min(Distances_1[1], MAX_SENSOR_DISTANCE);
+    int lr = min(Distances_1[0], MAX_SENSOR_DISTANCE);
+    int rl = min(Distances_0[2], MAX_SENSOR_DISTANCE);
+    int rm = min(Distances_0[1], MAX_SENSOR_DISTANCE);
+    int rr = min(Distances_0[0]*2, MAX_SENSOR_DISTANCE);
+
+    // Calculate Average Distances
+    int leftSum = 0, rightSum = 0, leftDistance, rightDistance;
+    leftSum += lm + lr;
+    rightSum += rl + rm;
+    leftDistance = leftSum * 10 / 2;
+    rightDistance = rightSum * 10 / 2;
+
+    ST7735_Message(1, 0, "L ", leftDistance);
+    ST7735_Message(1, 1, "R ", rightDistance);
+    ST7735_Message(1, 2, "E ", rightDistance - leftDistance);
 }
 
 void
 Controller(void) {
     enum ControlState state = GOGOGO, lastState = STOP, nextState = GOGOGO;
-    int speedL, speedR, feedForward = 0, speedForward = 850;
+    int speedL, speedR, feedForward = 0, speedForward = 800;
     int ll, lm, lr, rl, rm, rr;
 
     int distance_error = 0;
@@ -177,28 +196,28 @@ Controller(void) {
         printTelemetryScreen();
     }
 
-    OS_ClearMsTime();
+    int startTime = OS_MsTime();
 
     ST7735_FillScreen(0);
     ST7735_PlotClear(-500, 500);
 
     while (1) {
-        time = OS_MsTime();
+        time = OS_MsTime() - startTime;
 
         // get sensor readings
-        ll = min(Distances_0[0], MAX_SENSOR_DISTANCE);
-        lm = min(Distances_0[1], MAX_SENSOR_DISTANCE);
-        lr = min(Distances_0[2], MAX_SENSOR_DISTANCE);
-        rl = min(Distances_1[0], MAX_SENSOR_DISTANCE);
-        rm = min(Distances_1[1], MAX_SENSOR_DISTANCE);
-        rr = min(Distances_1[2], MAX_SENSOR_DISTANCE);
+        ll = min(Distances_1[2], MAX_SENSOR_DISTANCE);
+        lm = min(Distances_1[1], MAX_SENSOR_DISTANCE);
+        lr = min(Distances_1[0], MAX_SENSOR_DISTANCE);
+        rl = min(Distances_0[2], MAX_SENSOR_DISTANCE);
+        rm = min(Distances_0[1], MAX_SENSOR_DISTANCE);
+        rr = min(Distances_0[0]*2, MAX_SENSOR_DISTANCE);
 
         // Calculate Average Distances
         int leftSum = 0, rightSum = 0, leftDistance, rightDistance;
-        leftSum += ll + lm;
-        rightSum += rm + rr;
-        leftDistance = leftSum * 10 / 2;
-        rightDistance = rightSum * 10 / 2;
+        leftSum += ll + lm + lr;
+        rightSum += rl + rm + rr;
+        leftDistance = leftSum * 10 / 3;
+        rightDistance = rightSum * 10 / 3;
 
         if (state == STOP) {
             speedL = 0;
@@ -249,8 +268,7 @@ Controller(void) {
             distance_output = limit(distance_output, MOTOR_MIN, MOTOR_MAX);
 
             speedL = addMagnitude(distance_output + speedForward, feedForward);
-            speedR = addMagnitude(-distance_output + speedForward,
-                    feedForward + 20);
+            speedR = addMagnitude(-distance_output + speedForward, feedForward);
 
             // ========== End of Layer 1 ==========
             // ========== Layer 2 - Crash Detection ==========

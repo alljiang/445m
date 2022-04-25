@@ -395,7 +395,7 @@ uint32_t *PTxChan_3;
 uint32_t *Pdistances_3;
 uint32_t *Pamplitudes_3;
 uint32_t ChannelCount_3[3]; // debugging monitor
-
+#define MAX_SENSOR_DISTANCE 900
 uint32_t
 OPT3101_3_GetMeasurement(uint32_t distances[3], uint32_t amplitudes[3]) {
     uint32_t channel, distance, amplitude;
@@ -422,7 +422,11 @@ OPT3101_3_GetMeasurement(uint32_t distances[3], uint32_t amplitudes[3]) {
     GPIO_PORTC_ICR_R = 0x40;
     if (channel <= 2) {
         ChannelCount_3[channel]++;
-        distances[channel] = distance;
+
+//        distances[channel] = distance;
+        if (distance > MAX_SENSOR_DISTANCE) distance = MAX_SENSOR_DISTANCE;
+        distances[channel] = distances[channel] * 0.7 + distance * 0.3;
+
         amplitudes[channel] = amplitude;
     }
     return channel;
@@ -448,7 +452,8 @@ OPT3101_3_ArmInterrupts(uint32_t *pTxChan, uint32_t distances[3],
 }
 
 //*PTxChan set to 0,1,2 when measurement done
-void OPT3101_3_GPIOPortC_Handler(void) {
+void
+OPT3101_3_GPIOPortC_Handler(void) {
     static uint32_t channel = 0;
 
     *PTxChan_3 = OPT3101_3_GetMeasurement(Pdistances_3, Pamplitudes_3);

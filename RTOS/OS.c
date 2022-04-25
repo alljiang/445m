@@ -71,7 +71,7 @@ uint32_t period2 = TIME_1MS;
 uint64_t osTimeMs;
 int id_counter = 0;
 
-#define THREAD_STACK_SIZE 128
+#define THREAD_STACK_SIZE 256
 TCB_t tcb_list[MAX_THREADS_COUNT];
 TCBPtr RunPt;
 TCBPtr NextRunPt;
