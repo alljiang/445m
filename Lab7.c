@@ -124,9 +124,13 @@ enum ControlState {
     STOP, GOGOGO, WAITING, CRASHED
 };
 
-#define DISTANCE_KP 0.025
-#define DISTANCE_KI 0.0023 // 0.002
-#define DISTANCE_KD 0.10 //0.003
+#define DISTANCE_KP_SLOW 0.025
+#define DISTANCE_KI_SLOW 0.0010
+#define DISTANCE_KD_SLOW 0.06
+
+#define DISTANCE_KP 0.027
+#define DISTANCE_KI 0.0023
+#define DISTANCE_KD 0.10
 
 #define ANGLE_KP 0.0
 #define ANGLE_KI 0.0
@@ -134,8 +138,8 @@ enum ControlState {
 
 #define KI_SCALE 1000
 
-#define CRASH_DETECT_THRESHOLD 80
-#define CRASH_DETECT_TIME 800
+#define CRASH_DETECT_THRESHOLD 70
+#define CRASH_DETECT_TIME 1000
 
 char *str_ll = "ll: ";
 char *str_lm = "lm: ";
@@ -176,16 +180,17 @@ printTelemetryScreen() {
 void
 Controller(void) {
     enum ControlState state = GOGOGO, lastState = STOP, nextState = GOGOGO;
-    int speedL, speedR, feedForward = 0, speedForward = 820;
+    int speedL, speedR, feedForward = 0, speedForward = 820; // 820
     int ll, lm, lr, rl, rm, rr;
 
     int distance_error = 0;
     int64_t distance_integral = 0;
     int distance_lastError = 0;
     int distance_lastD = 0;
-    int distance_dError, distance_dErrorFiltered = 0;
+    int distance_dError, distance_dErrorFiltered = 3000;
     int time, crashDetectStartTime = -1;
     bool crashedOnLeftSide;
+    bool last_slowMode = false;
 
     int transitionTime = 0;
 
@@ -218,6 +223,8 @@ Controller(void) {
         rightSum += rl + rm + rr;
         leftDistance = leftSum * 10 / 3;
         rightDistance = rightSum * 10 / 3;
+        int frontDistance = min(lr, rl) * 10;
+        int midDistance = min(lm, rm) * 10;
 
         if (state == STOP) {
             speedL = 0;
@@ -228,8 +235,8 @@ Controller(void) {
             Launchpad_SetLED(LED_BLUE, true);
         } else if (state == GOGOGO) {
             Launchpad_SetLED(LED_BLUE, false);
-            Launchpad_SetLED(LED_RED, leftDistance > rightDistance);
-            Launchpad_SetLED(LED_GREEN, leftDistance < rightDistance);
+//            Launchpad_SetLED(LED_RED, leftDistance > rightDistance);
+//            Launchpad_SetLED(LED_GREEN, leftDistance < rightDistance);
 
             if (lastState != GOGOGO) {
                 // first iteration, reset some parameters
@@ -250,16 +257,51 @@ Controller(void) {
             distance_dErrorFiltered = distance_dErrorFiltered * 0.8
                     + abs(distance_dError) * 0.2;
 
-            int distance_p = DISTANCE_KP * distance_error;
+
+            int distance_p = distance_error;
             int distance_i = distance_integral / KI_SCALE;
-            int distance_d = DISTANCE_KD * (distance_dError);
+            int distance_d = distance_dError;
+
+            if (frontDistance < 5000 || midDistance < 2800) {
+                speedForward = 780;
+                Launchpad_SetLED(LED_RED, true);
+                Launchpad_SetLED(LED_GREEN, false);
+
+                if (!last_slowMode) {
+                    last_slowMode = true;
+                    distance_integral = 0;
+                }
+
+                distance_p = DISTANCE_KP_SLOW * distance_p;
+                distance_integral += DISTANCE_KI_SLOW * distance_error;
+                distance_d = DISTANCE_KD_SLOW * distance_d;
+            } else {
+                if (distance_dErrorFiltered < 150) {
+                    speedForward = 1000;
+                    Launchpad_SetLED(LED_RED, false);
+                    Launchpad_SetLED(LED_GREEN, true);
+                } else {
+                    speedForward = 850;
+                    Launchpad_SetLED(LED_RED, false);
+                    Launchpad_SetLED(LED_GREEN, false);
+                }
+
+                if (last_slowMode) {
+                    last_slowMode = false;
+                    distance_integral = 0;
+                }
+
+                distance_p = DISTANCE_KP * distance_p;
+                distance_integral += DISTANCE_KI * distance_error;
+                distance_d = DISTANCE_KD * distance_d;
+            }
+
             distance_lastD = distance_lastD * 0.4 + distance_d * 0.6;
 
             // update lastError
             distance_lastError = distance_error;
 
             // cap the I term
-            distance_integral += DISTANCE_KI * distance_error;
             distance_integral = limit(distance_integral,
             MOTOR_MIN * KI_SCALE,
             MOTOR_MAX * KI_SCALE);
@@ -267,8 +309,13 @@ Controller(void) {
             int distance_output = distance_p + distance_i + distance_lastD;
             distance_output = limit(distance_output, MOTOR_MIN, MOTOR_MAX);
 
-            speedL = addMagnitude(distance_output + speedForward, feedForward + 23);
-            speedR = addMagnitude(-distance_output + speedForward, feedForward);
+            int offset = distance_output + speedForward - 1000;
+            if (offset < 0) offset = 0;
+
+            speedL = addMagnitude(distance_output + speedForward - offset,
+                    feedForward + 20);
+            speedR = addMagnitude(-distance_output + speedForward - offset,
+                    feedForward);
 
             // ========== End of Layer 1 ==========
             // ========== Layer 2 - Crash Detection ==========
@@ -279,7 +326,7 @@ Controller(void) {
                 // crash detected!
                 crashedOnLeftSide = distance_error > 0;
 
-                transitionTime = time + 400;
+                transitionTime = time + 600;
                 nextState = CRASHED;
                 Launchpad_SetLED(LED_BLUE, true);
                 Launchpad_SetLED(LED_RED, false);
@@ -382,8 +429,8 @@ main(void) { 			// main
     ST7735_InitR(INITR_REDTAB);             // LCD initialization
     UART_Init();                              // serial I/O for interpreter
 
-    I2C0_Init(200000, 80000000);
-    I2C3_Init(200000, 80000000);
+    I2C0_Init(400000, 80000000);
+    I2C3_Init(400000, 80000000);
 
     OPT3101_0_Init(7);
     OPT3101_3_Init(7);
