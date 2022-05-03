@@ -125,10 +125,10 @@ enum ControlState {
 };
 
 #define DISTANCE_KP_SLOW 0.025
-#define DISTANCE_KI_SLOW 0.0010
-#define DISTANCE_KD_SLOW 0.06
+#define DISTANCE_KI_SLOW 0.001
+#define DISTANCE_KD_SLOW 0.08
 
-#define DISTANCE_KP 0.027
+#define DISTANCE_KP 0.03
 #define DISTANCE_KI 0.0023
 #define DISTANCE_KD 0.10
 
@@ -139,7 +139,8 @@ enum ControlState {
 #define KI_SCALE 1000
 
 #define CRASH_DETECT_THRESHOLD 70
-#define CRASH_DETECT_TIME 1000
+#define SHORT_CRASH_DETECT_TIME 400
+#define CRASH_DETECT_TIME 1600
 
 char *str_ll = "ll: ";
 char *str_lm = "lm: ";
@@ -225,6 +226,8 @@ Controller(void) {
         rightDistance = rightSum * 10 / 3;
         int frontDistance = min(lr, rl) * 10;
         int midDistance = min(lm, rm) * 10;
+        int backDistance = min(ll, rr) * 10;
+        int nearestDistance = min(min(frontDistance, midDistance), backDistance);
 
         if (state == STOP) {
             speedL = 0;
@@ -262,8 +265,8 @@ Controller(void) {
             int distance_i = distance_integral / KI_SCALE;
             int distance_d = distance_dError;
 
-            if (frontDistance < 5000 || midDistance < 2800) {
-                speedForward = 780;
+            if (frontDistance < 6000 || midDistance < 3200) {
+                speedForward = 770;
                 Launchpad_SetLED(LED_RED, true);
                 Launchpad_SetLED(LED_GREEN, false);
 
@@ -277,7 +280,7 @@ Controller(void) {
                 distance_d = DISTANCE_KD_SLOW * distance_d;
             } else {
                 if (distance_dErrorFiltered < 150) {
-                    speedForward = 1000;
+                    speedForward = 920;
                     Launchpad_SetLED(LED_RED, false);
                     Launchpad_SetLED(LED_GREEN, true);
                 } else {
@@ -313,7 +316,7 @@ Controller(void) {
             if (offset < 0) offset = 0;
 
             speedL = addMagnitude(distance_output + speedForward - offset,
-                    feedForward + 20);
+                    feedForward + 35);
             speedR = addMagnitude(-distance_output + speedForward - offset,
                     feedForward);
 
@@ -322,8 +325,17 @@ Controller(void) {
 
             if (distance_dErrorFiltered > CRASH_DETECT_THRESHOLD) {
                 crashDetectStartTime = time;
-            } else if (time - crashDetectStartTime > CRASH_DETECT_TIME) {
-                // crash detected!
+            } else if ((time - crashDetectStartTime > SHORT_CRASH_DETECT_TIME) && (nearestDistance < 1000)) {
+                // front crash detected!
+                crashedOnLeftSide = distance_error > 0;
+
+                transitionTime = time + 600;
+                nextState = CRASHED;
+                Launchpad_SetLED(LED_BLUE, true);
+                Launchpad_SetLED(LED_RED, false);
+                Launchpad_SetLED(LED_GREEN, false);
+            } else if (time - crashDetectStartTime > SHORT_CRASH_DETECT_TIME) {
+                // stuck for a while
                 crashedOnLeftSide = distance_error > 0;
 
                 transitionTime = time + 600;
@@ -361,8 +373,8 @@ Controller(void) {
 //                speedL = -800;
 //                speedR = -750;
             }
-            speedL = -920;
-            speedR = -900;
+            speedL = -820;
+            speedR = -800;
 
             if (time > transitionTime) {
                 nextState = GOGOGO;

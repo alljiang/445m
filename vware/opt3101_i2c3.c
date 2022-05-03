@@ -395,7 +395,7 @@ uint32_t *PTxChan_3;
 uint32_t *Pdistances_3;
 uint32_t *Pamplitudes_3;
 uint32_t ChannelCount_3[3]; // debugging monitor
-#define MAX_SENSOR_DISTANCE 1100
+#define MAX_SENSOR_DISTANCE 1400
 uint32_t
 OPT3101_3_GetMeasurement(uint32_t distances[3], uint32_t amplitudes[3]) {
     uint32_t channel, distance, amplitude;
