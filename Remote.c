@@ -128,8 +128,6 @@ bool btnA, btnB, btnStart;
  * Remote -> Car
  * Heartbeat: [0, 0x12, 0x34, 0x56, 0x78]
  * Set Motor Speed: [2, <Left Upper 8 bits>, <Left Lower 8 bits>, <Right Upper 8 bits>, <Right Lower 8 bits>
- * Set Driving Mode: [3, 0x21, 0x32, 0x43, 0x54]
- * Set Wall Following Mode: [3, 0x65, 0x76, 0x87, 0x98]
  *
  *
  *
@@ -155,8 +153,7 @@ Heartbeat_Task(void) {
 void
 ProcessHC12RxBuffer() {
     while (1) {
-        while (rxBufferLength >= 6) {
-//            DisableInterrupts();
+        if (rxBufferLength >= 6) {
             uint8_t header = rxBuffer[(rxBufferStart + 0) % sizeof(rxBuffer)];
 
             // verify header
@@ -181,7 +178,6 @@ ProcessHC12RxBuffer() {
                 rxBufferLength--;
                 continue;
             }
-//            EnableInterrupts();
 
             UART_OutChar(header);
             UART_OutChar(rxBuffer[(rxBufferStart + 1) % sizeof(rxBuffer)]);
@@ -190,12 +186,12 @@ ProcessHC12RxBuffer() {
             UART_OutChar(rxBuffer[(rxBufferStart + 4) % sizeof(rxBuffer)]);
             UART_OutChar('\r');
             UART_OutChar('\n');
+
+            rxBufferStart = (rxBufferStart + 6) % sizeof(rxBuffer); // increment start
+            rxBufferLength -= 6;
+        } else {
+            OS_Sleep(5);
         }
-
-        uint8_t dataTest[4] = {12, 14, 52, 63};
-        HC12_SendData(10, dataTest);
-
-        OS_Sleep(1000);
     }
 }
 
