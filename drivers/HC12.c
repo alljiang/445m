@@ -28,6 +28,8 @@ extern uint8_t rxBuffer[100];
 extern uint8_t rxBufferStart;
 extern uint8_t rxBufferLength;
 
+Sema4Type uart_sem;
+
 void
 UART1_OutString(const char *str) {
     int i = 0;
@@ -122,6 +124,8 @@ HC12_Initialize() {
     // Allow HC12 to exit command mode
     Delay1ms(200);
 
+    OS_InitSemaphore(&uart_sem, 1);
+
 }
 
 /*
@@ -137,6 +141,8 @@ HC12_SendData(uint8_t header, uint8_t *data) {
     if (header > 15) {
         return;
     }
+
+    OS_Wait(&uart_sem);
 
     // calculate checksum
     uint8_t checksum = header;
@@ -154,4 +160,6 @@ HC12_SendData(uint8_t header, uint8_t *data) {
 
     // send checksum
     UARTCharPut(UART1_BASE, checksum);
+
+    OS_Signal(&uart_sem);
 }

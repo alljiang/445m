@@ -116,6 +116,7 @@ uint8_t rxBufferLength;
 uint32_t joystickH, joystickV, triggerL, triggerR;
 bool btnA, btnB, btnStart;
 
+
 /*
  * [0]: HEADER ( Range [0, 15] )
  * [1]: DATA
@@ -139,6 +140,17 @@ bool btnA, btnB, btnStart;
  * Car -> Remote
  * Heartbeat: [1, 0x9A, 0xBC, 0xDE, 0xF0]
  */
+
+int count = 0;
+
+uint8_t heartbeat_data[4] = {0x12, 0x34, 0x56, 0x78};
+void
+Heartbeat_Task(void) {
+    while (1) {
+        hc12_send(0, heartbeat_data);
+        OS_Sleep(100);
+    }
+}
 
 void
 ProcessHC12RxBuffer() {
@@ -233,12 +245,10 @@ HumanInputsTask(void) {
 
 void
 ScreenDisplayTask(void) {
-    ILI9341_Message(0, 0, "asdfghjkl", 0);
-    ILI9341_Message(0, 1, "012345678", 1);
-    ILI9341_Message(1, 0, "asdfghjkl", 0);
-    ILI9341_Message(1, 1, "012345678", 1);
-    ILI9341_DrawPixel(0, 0, 0xF80000);
-    OS_Kill();
+    while (1) {
+        ILI9341_Message(0, 1, "Count: ", count);
+        OS_Sleep(100);
+    }
 }
 
 void
