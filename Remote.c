@@ -137,15 +137,17 @@ bool btnA, btnB, btnStart;
  *
  * Car -> Remote
  * Heartbeat: [1, 0x9A, 0xBC, 0xDE, 0xF0]
+ * Sensor Data (mm): [3, L, R, M, 0x00]
  */
 
-int count = 0;
+int lastHeartbeat = 0;
+uint8_t sensor_l = -1, sensor_r = -1, sensor_m = -1;
 
 uint8_t heartbeat_data[4] = {0x12, 0x34, 0x56, 0x78};
 void
 Heartbeat_Task(void) {
     while (1) {
-        hc12_send(0, heartbeat_data);
+        HC12_SendData(0, heartbeat_data);
         OS_Sleep(100);
     }
 }
@@ -186,6 +188,19 @@ ProcessHC12RxBuffer() {
             UART_OutChar(rxBuffer[(rxBufferStart + 4) % sizeof(rxBuffer)]);
             UART_OutChar('\r');
             UART_OutChar('\n');
+
+            if (header == 0) {
+                if (rxBuffer[(rxBufferStart + 1) % sizeof(rxBuffer)] == 0x9A &&
+                   rxBuffer[(rxBufferStart + 2) % sizeof(rxBuffer)] == 0xBC &&
+                   rxBuffer[(rxBufferStart + 3) % sizeof(rxBuffer)] == 0xDE &&
+                   rxBuffer[(rxBufferStart + 4) % sizeof(rxBuffer)] == 0xF0) {
+                       lastHeartbeat = OS_MsTime();
+               }
+            } else if (header == 3) {
+                sensor_l = rxBuffer[(rxBufferStart + 1) % sizeof(rxBuffer)];
+                sensor_m = rxBuffer[(rxBufferStart + 2) % sizeof(rxBuffer)];
+                sensor_r = rxBuffer[(rxBufferStart + 3) % sizeof(rxBuffer)];
+            }
 
             rxBufferStart = (rxBufferStart + 6) % sizeof(rxBuffer); // increment start
             rxBufferLength -= 6;
@@ -241,8 +256,15 @@ HumanInputsTask(void) {
 
 void
 ScreenDisplayTask(void) {
+    int time;
     while (1) {
-        ILI9341_Message(0, 1, "Count: ", count);
+        time = OS_MsTime();
+        ILI9341_Message(0, 1, "Connected: ", time - lastHeartbeat < 1000);
+        ILI9341_Message(1, 0, "Left: ", sensor_l);
+        ILI9341_Message(1, 1, "Mid: ", sensor_m);
+        ILI9341_Message(1, 2, "Right: ", sensor_r);
+        ILI9341_Message(1, 4, "tl: ", triggerL_raw);
+        ILI9341_Message(1, 4, "tr: ", triggerR_raw);
         OS_Sleep(100);
     }
 }
@@ -265,6 +287,7 @@ realmain(void) {        // lab 4 real main
     NumCreated += OS_AddThread(&Interpreter, 128, 4);
     NumCreated += OS_AddThread(&HumanInputsTask, 128, 3);
     NumCreated += OS_AddThread(&ScreenDisplayTask, 128, 4);
+    NumCreated += OS_AddThread(&Heartbeat_Task, 128, 3);
     NumCreated += OS_AddThread(&ProcessHC12RxBuffer, 128, 2);
     NumCreated += OS_AddThread(&Idle, 128, 5); // runs when nothing useful to do
 

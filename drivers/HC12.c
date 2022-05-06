@@ -15,6 +15,7 @@
 #include "driverlib/pin_map.h"
 #include "driverlib/UART.h"
 #include "driverlib/sysctl.h"
+#include "RTOS/OS.h"
 
 extern void
 Delay1ms(uint32_t n);

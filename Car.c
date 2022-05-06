@@ -4,11 +4,11 @@
 
 // Jonathan W. Valvano 3/29/17, valvano@mail.utexas.edu
 // Andreas Gerstlauer 3/1/16, gerstl@ece.utexas.edu
-// EE445M/EE380L.6 
-// You may use, edit, run or distribute this file 
+// EE445M/EE380L.6
+// You may use, edit, run or distribute this file
 // You are free to change the syntax/organization of this file
 
-// LED outputs to logic analyzer for use by OS profile 
+// LED outputs to logic analyzer for use by OS profile
 // PF1 is preemptive thread switch
 // PF2 is first periodic background task (if any)
 // PF3 is second periodic background task (if any)
@@ -26,11 +26,10 @@
 // PE3 Ain0 sampled at 2kHz, sequencer 3, by Interpreter, using software start
 
 #include <stdint.h>
-#include <stdbool.h> 
-#include <stdio.h> 
+#include <stdbool.h>
+#include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include <vware/opt3101_i2c0.h>
 #include <vware/opt3101_i2c3.h>
 #include "vware/tm4c123gh6pm.h"
 #include "vware/CortexM.h"
@@ -50,10 +49,9 @@
 #include "utils/uart-utils.h"
 
 #include "drivers/ping.h"
-#include "drivers/ir.h"
+#include "drivers/HC12.h"
 #include "drivers/gpio.h"
 #include "drivers/launchpad.h"
-#include "drivers/hcsr04.h"
 
 // CAN IDs are set dynamically at time of CAN0_Open
 // Reverse on other microcontroller
@@ -80,6 +78,13 @@ extern int32_t MaxJitter;      // largest time jitter between interrupts in usec
 //---------------------ROBOT CAR STUFFS---------------------
 int motor_left = 0;
 int motor_right = 0;
+uint32_t TxChannel_1;
+uint32_t Amplitudes_1[3];
+uint32_t Distances_1[3];
+
+uint8_t rxBuffer[100];
+uint8_t rxBufferStart;
+uint8_t rxBufferLength;
 
 #define MOTOR_MAX 1000
 #define MOTOR_MIN -1000
@@ -90,7 +95,7 @@ CANSendMotor(int left, int right) {
     // make left and right 12 bits each
     packet_motor[0] = 0; // type motor speed
 
-    // total 24 bits 
+    // total 24 bits
     // 1: left[12:4]
     // 2: left[3:0] | right[12:8]
     // 3: right[7:0]
@@ -113,11 +118,13 @@ Idle(void) {
     }
 }
 
-uint8_t heartbeat_data[4] = {0x9A, 0xBC, 0xDE, 0xF0}
+int lastHeartbeat = 0;
+uint8_t heartbeat_data[4] = {0x9A, 0xBC, 0xDE, 0xF0};
+
 void
 Heartbeat_Task(void) {
     while (1) {
-        hc12_send(1, heartbeat_data);
+        HC12_SendData(1, heartbeat_data);
         OS_Sleep(100);
     }
 }
@@ -157,6 +164,7 @@ ProcessHC12RxBuffer() {
                     rxBuffer[(rxBufferStart + 2) % sizeof(rxBuffer)] == 0x34 &&
                     rxBuffer[(rxBufferStart + 3) % sizeof(rxBuffer)] == 0x56 &&
                     rxBuffer[(rxBufferStart + 4) % sizeof(rxBuffer)] == 0x78) {
+                        lastHeartbeat = OS_MsTime();
                 }
             } else if (header == 2) {
                 // motor speed
@@ -164,7 +172,7 @@ ProcessHC12RxBuffer() {
                 left |= rxBuffer[(rxBufferStart + 2) % sizeof(rxBuffer)];
                 int right = rxBuffer[(rxBufferStart + 3) % sizeof(rxBuffer)] << 8;
                 right |= rxBuffer[(rxBufferStart + 4) % sizeof(rxBuffer)];
-                
+
                 motor_left = left;
                 motor_right = right;
             }
@@ -193,7 +201,7 @@ void
 Controller(void) {
     enum ControlState state = GOGOGO, lastState = STOP, nextState = GOGOGO;
     int speedL, speedR;
-    int ll, lm, lr, rl, rm, rr;
+    uint8_t rl, rm, rr;
 
     int time;
 
@@ -204,12 +212,13 @@ Controller(void) {
         time = OS_MsTime() - startTime;
 
         // get sensor readings
-        ll = min(Distances_0[2], MAX_SENSOR_DISTANCE);
-        lm = min(Distances_0[1], MAX_SENSOR_DISTANCE);
-        lr = min(Distances_0[0], MAX_SENSOR_DISTANCE);
-        rl = min(Distances_1[2], MAX_SENSOR_DISTANCE);
-        rm = min(Distances_1[1], MAX_SENSOR_DISTANCE);
-        rr = min(Distances_1[0], MAX_SENSOR_DISTANCE);
+        rl = min(Distances_1[2]/10, 0xFF);
+        rm = min(Distances_1[1]/10, 0xFF);
+        rr = min(Distances_1[0]/10, 0xFF);
+
+        // send sensor data
+        uint8_t sensor_data[4] = {rl, rm , rr, 0x0};
+        HC12_SendData(3, sensor_data);
 
         if (state == STOP) {
             speedL = 0;
@@ -222,7 +231,6 @@ Controller(void) {
             Launchpad_SetLED(LED_RED, false);
             Launchpad_SetLED(LED_GREEN, false);
             Launchpad_SetLED(LED_BLUE, false);
-            }
         } else {
             while (1);
         }
@@ -254,6 +262,7 @@ realmain(void) { // realmain
     NumCreated = 0;
     NumCreated += OS_AddThread(&Interpreter, 128, 3);
     NumCreated += OS_AddThread(&Controller, 128, 3);
+    NumCreated += OS_AddThread(&Heartbeat_Task, 128, 3);
     NumCreated += OS_AddThread(&Idle, 128, 5);  // at lowest priority
 
     OS_Launch(TIME_2MS); // doesn't return, interrupts enabled in here
@@ -262,7 +271,7 @@ realmain(void) { // realmain
 
 //*******************Trampoline for selecting main to execute**********
 int
-main(void) { 			// main
+main(void) {            // main
     PLL_Init(Bus80MHz);
     GPIO_Initialize();
     Launchpad_PortFInitialize();
@@ -273,8 +282,15 @@ main(void) { 			// main
     HC12_Initialize();
     UART_Init();                              // serial I/O for interpreter
 
-    I2C0_Init(400000, 80000000);
     I2C3_Init(400000, 80000000);
+
+    OPT3101_3_Init(7);
+    OPT3101_3_Setup();
+    OPT3101_3_CalibrateInternalCrosstalk();
+
+    TxChannel_1 = 3;
+    OPT3101_3_ArmInterrupts(&TxChannel_1, Distances_1, Amplitudes_1);
+    OPT3101_3_StartMeasurementChannel(1);
 
     realmain();
 }

@@ -21,20 +21,11 @@ GPIO_PortAHandler(void) {
 
 void
 GPIO_PortBHandler(void) {
-    if (GPIO_PORTB_RIS_R & (1u << 6u)) {
-        // PB6
-        GPIO_ClearInterruptStatus(PORT_B, 6);
-        HCSR04_InterruptHandler();
-    }
 }
 
 void
 GPIO_PortCHandler(void) {
-    if (GPIO_PORTC_RIS_R & (1u << 4u)) {
-        // PC4
-        GPIO_ClearInterruptStatus(PORT_C, 4);
-        OPT3101_0_GPIOPortC_Handler();
-    } else if (GPIO_PORTC_RIS_R & (1u << 6u)) {
+    if (GPIO_PORTC_RIS_R & (1u << 6u)) {
         // PC6
         GPIO_ClearInterruptStatus(PORT_C, 6);
         OPT3101_3_GPIOPortC_Handler();
