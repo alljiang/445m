@@ -38,7 +38,6 @@
 #include "vware/LPF.h"
 #include "vware/I2CB1.h"
 #include "vware/I2C3.h"
-#include "RTOS/UART0int.h"
 #include "RTOS/ADC.h"
 #include "RTOS/OS.h"
 #include "RTOS/heap.h"
@@ -46,7 +45,6 @@
 #include "RTOS/ST7735.h"
 #include "RTOS/can0.h"
 #include "utils/utils.h"
-#include "utils/uart-utils.h"
 
 #include "drivers/ping.h"
 #include "drivers/HC12.h"
@@ -86,6 +84,12 @@ uint8_t rxBuffer[100];
 uint8_t rxBufferStart;
 uint8_t rxBufferLength;
 
+int lastHeartbeat = -1;
+
+uint8_t isConnected;
+bool sensorRequested, heartbeatRequested;
+int sensorRequestTime, heartbeatRequestTime;
+
 #define MOTOR_MAX 1000
 #define MOTOR_MIN -1000
 
@@ -118,14 +122,32 @@ Idle(void) {
     }
 }
 
-int lastHeartbeat = 0;
 uint8_t heartbeat_data[4] = {0x9A, 0xBC, 0xDE, 0xF0};
 
 void
-Heartbeat_Task(void) {
+RequestHandler_Task(void) {
+
     while (1) {
-        HC12_SendData(1, heartbeat_data);
-        OS_Sleep(100);
+        int time = OS_MsTime();
+
+        if (heartbeatRequested && time - heartbeatRequestTime > 10) {
+            HC12_SendData(1, heartbeat_data);
+            heartbeatRequested = false;
+        } else if (sensorRequested && time - sensorRequestTime > 10) {
+            // get sensor readings
+            uint8_t rl = min(Distances_1[2]/10, 0xFF);
+            uint8_t rm = min(Distances_1[1]/10, 0xFF);
+            uint8_t rr = min(Distances_1[0]/10, 0xFF);
+
+            // send sensor data
+            uint8_t sensor_data[4] = {rl, rm , rr, 0x0};
+            HC12_SendData(3, sensor_data);
+            sensorRequested = false;
+        }
+
+        isConnected = (OS_MsTime() - lastHeartbeat < 1000) && (lastHeartbeat > -1);
+
+        OS_Sleep(2);
     }
 }
 
@@ -164,7 +186,10 @@ ProcessHC12RxBuffer() {
                     rxBuffer[(rxBufferStart + 2) % sizeof(rxBuffer)] == 0x34 &&
                     rxBuffer[(rxBufferStart + 3) % sizeof(rxBuffer)] == 0x56 &&
                     rxBuffer[(rxBufferStart + 4) % sizeof(rxBuffer)] == 0x78) {
-                        lastHeartbeat = OS_MsTime();
+
+                    lastHeartbeat = OS_MsTime();
+                    heartbeatRequested = true;
+                    heartbeatRequestTime = OS_MsTime();
                 }
             } else if (header == 2) {
                 // motor speed
@@ -175,15 +200,17 @@ ProcessHC12RxBuffer() {
 
                 motor_left = left;
                 motor_right = right;
-            }
+            } else if (header == 4) {
+                // sensor, verify data
+                if (rxBuffer[(rxBufferStart + 1) % sizeof(rxBuffer)] == 0xAA &&
+                    rxBuffer[(rxBufferStart + 2) % sizeof(rxBuffer)] == 0xBB &&
+                    rxBuffer[(rxBufferStart + 3) % sizeof(rxBuffer)] == 0xCC &&
+                    rxBuffer[(rxBufferStart + 4) % sizeof(rxBuffer)] == 0xDD) {
 
-            UART_OutChar(header);
-            UART_OutChar(rxBuffer[(rxBufferStart + 1) % sizeof(rxBuffer)]);
-            UART_OutChar(rxBuffer[(rxBufferStart + 2) % sizeof(rxBuffer)]);
-            UART_OutChar(rxBuffer[(rxBufferStart + 3) % sizeof(rxBuffer)]);
-            UART_OutChar(rxBuffer[(rxBufferStart + 4) % sizeof(rxBuffer)]);
-            UART_OutChar('\r');
-            UART_OutChar('\n');
+                    sensorRequested = true;
+                    sensorRequestTime = OS_MsTime();
+                }
+            }
 
             rxBufferStart = (rxBufferStart + 6) % sizeof(rxBuffer); // increment start
             rxBufferLength -= 6;
@@ -199,10 +226,8 @@ enum ControlState {
 
 void
 Controller(void) {
-    enum ControlState state = GOGOGO, lastState = STOP, nextState = GOGOGO;
+    enum ControlState state = STOP, lastState = STOP, nextState = STOP;
     int speedL, speedR;
-    uint8_t rl, rm, rr;
-
     int time;
 
 
@@ -211,26 +236,36 @@ Controller(void) {
     while (1) {
         time = OS_MsTime() - startTime;
 
-        // get sensor readings
-        rl = min(Distances_1[2]/10, 0xFF);
-        rm = min(Distances_1[1]/10, 0xFF);
-        rr = min(Distances_1[0]/10, 0xFF);
-
-        // send sensor data
-        uint8_t sensor_data[4] = {rl, rm , rr, 0x0};
-        HC12_SendData(3, sensor_data);
-
         if (state == STOP) {
             speedL = 0;
             speedR = 0;
 
             Launchpad_SetLED(LED_RED, true);
-            Launchpad_SetLED(LED_GREEN, true);
-            Launchpad_SetLED(LED_BLUE, true);
-        } else if (state == GOGOGO) {
-            Launchpad_SetLED(LED_RED, false);
             Launchpad_SetLED(LED_GREEN, false);
             Launchpad_SetLED(LED_BLUE, false);
+
+            if (isConnected) {
+                nextState = GOGOGO;
+            }
+
+        } else if (state == GOGOGO) {
+
+            speedL = motor_left;
+            speedR = motor_right;
+
+            if (speedL == 0 && speedR == 0) {
+                Launchpad_SetLED(LED_RED, false);
+                Launchpad_SetLED(LED_GREEN, true);
+                Launchpad_SetLED(LED_BLUE, false);
+            } else {
+                Launchpad_SetLED(LED_RED, true);
+                Launchpad_SetLED(LED_GREEN, true);
+                Launchpad_SetLED(LED_BLUE, true);
+            }
+
+            if (!isConnected) {
+                nextState = STOP;
+            }
         } else {
             while (1);
         }
@@ -260,9 +295,9 @@ realmain(void) { // realmain
 
     // create initial foreground threads
     NumCreated = 0;
-    NumCreated += OS_AddThread(&Interpreter, 128, 3);
     NumCreated += OS_AddThread(&Controller, 128, 3);
-    NumCreated += OS_AddThread(&Heartbeat_Task, 128, 3);
+    NumCreated += OS_AddThread(&RequestHandler_Task, 128, 3);
+    NumCreated += OS_AddThread(&ProcessHC12RxBuffer, 128, 2);
     NumCreated += OS_AddThread(&Idle, 128, 5);  // at lowest priority
 
     OS_Launch(TIME_2MS); // doesn't return, interrupts enabled in here
@@ -280,7 +315,6 @@ main(void) {            // main
     CANSendMotor(0, 0);
 
     HC12_Initialize();
-    UART_Init();                              // serial I/O for interpreter
 
     I2C3_Init(400000, 80000000);
 

@@ -101,6 +101,7 @@
 #include "drivers/HC12.h"
 #include "utils/bit-utils.h"
 #include "utils/uart-utils.h"
+#include "utils/utils.h"
 
 #include "gpio.h"
 #include "launchpad.h"
@@ -126,29 +127,81 @@ bool btnA, btnB, btnStart;
  * [5]: XOR CHECKSUM
  *
  * Remote -> Car
- * Heartbeat: [0, 0x12, 0x34, 0x56, 0x78]
+ * Heartbeat/Request Heartbeat: [0, 0x12, 0x34, 0x56, 0x78]
  * Set Motor Speed: [2, <Left Upper 8 bits>, <Left Lower 8 bits>, <Right Upper 8 bits>, <Right Lower 8 bits>
- *
- *
- *
- *
- *
- *
+ * Request Sensor Data: [4, 0xAA, 0xBB, 0xCC, 0xDD]
  *
  * Car -> Remote
  * Heartbeat: [1, 0x9A, 0xBC, 0xDE, 0xF0]
  * Sensor Data (mm): [3, L, R, M, 0x00]
  */
 
-int lastHeartbeat = 0;
-uint8_t sensor_l = -1, sensor_r = -1, sensor_m = -1;
+int lastHeartbeat = -1;
+uint8_t sensor_l = 0, sensor_r = 0, sensor_m = 0;
+
+uint8_t isConnected;
+bool heartbeatRequested, sensorRequested;
+int heartbeatRequestTime, sensorRequestTime;
+int lastMotorSendTime;
+
+uint32_t joystickH_raw, joystickV_raw, triggerL_raw, triggerR_raw;
+int leftMotor, rightMotor;
 
 uint8_t heartbeat_data[4] = {0x12, 0x34, 0x56, 0x78};
+uint8_t sensorRequest_data[4] = {0xAA, 0xBB, 0xCC, 0xDD};
 void
-Heartbeat_Task(void) {
+Request_Task(void) {
+    int time;
+
     while (1) {
-        HC12_SendData(0, heartbeat_data);
-        OS_Sleep(100);
+        time = OS_MsTime();
+        if (!sensorRequested && !heartbeatRequested) {
+            if (time - heartbeatRequestTime > 300) {
+                heartbeatRequested = true;
+                heartbeatRequestTime = time;
+
+                HC12_SendData(0, heartbeat_data);
+            } else if (time - sensorRequestTime > 300) {
+                sensorRequested = true;
+                sensorRequestTime = time;
+
+                HC12_SendData(4, sensorRequest_data);
+            } else if (time - lastMotorSendTime > 50) {
+                lastMotorSendTime = time;
+
+                if (triggerL_raw < 1000) leftMotor = 800;
+                else leftMotor = 0;
+
+                if (triggerR_raw > 1500) rightMotor = 800;
+                else rightMotor = 0;
+
+                if (!btnA && !btnB) {
+                    leftMotor = 0;
+                    rightMotor = 0;
+                } else if (btnA) {
+                    leftMotor = -leftMotor;
+                    rightMotor = -rightMotor;
+                }
+
+                uint8_t motorData[] = {(uint8_t)(leftMotor >> 8),
+                                        (uint8_t)(leftMotor & 0xFF),
+                                        (uint8_t)(rightMotor >> 8),
+                                        (uint8_t)(rightMotor & 0xFF)};
+                HC12_SendData(2, motorData);
+            }
+        } else if (heartbeatRequested && time - heartbeatRequestTime > 100) {
+            // check if re-request necessary
+            heartbeatRequestTime = time;
+            HC12_SendData(0, heartbeat_data);
+        } else if (sensorRequested && time - sensorRequestTime > 100) {
+            // check if re-request necessary
+            sensorRequestTime = time;
+            HC12_SendData(4, sensorRequest_data);
+        }
+
+        isConnected = (time - lastHeartbeat < 1000) && (lastHeartbeat > -1);
+
+        OS_Sleep(5);
     }
 }
 
@@ -189,14 +242,16 @@ ProcessHC12RxBuffer() {
             UART_OutChar('\r');
             UART_OutChar('\n');
 
-            if (header == 0) {
+            if (header == 1) {
                 if (rxBuffer[(rxBufferStart + 1) % sizeof(rxBuffer)] == 0x9A &&
                    rxBuffer[(rxBufferStart + 2) % sizeof(rxBuffer)] == 0xBC &&
                    rxBuffer[(rxBufferStart + 3) % sizeof(rxBuffer)] == 0xDE &&
                    rxBuffer[(rxBufferStart + 4) % sizeof(rxBuffer)] == 0xF0) {
-                       lastHeartbeat = OS_MsTime();
+                    heartbeatRequested = false;
+                    lastHeartbeat = OS_MsTime();
                }
             } else if (header == 3) {
+                sensorRequested = false;
                 sensor_l = rxBuffer[(rxBufferStart + 1) % sizeof(rxBuffer)];
                 sensor_m = rxBuffer[(rxBufferStart + 2) % sizeof(rxBuffer)];
                 sensor_r = rxBuffer[(rxBufferStart + 3) % sizeof(rxBuffer)];
@@ -220,8 +275,6 @@ HumanInputsTask(void) {
     // Trigger L: PE1 (ADC CH2)
     // Trigger R: PE2 (ADC CH1)
 
-    uint32_t joystickH_raw, joystickV_raw, triggerL_raw, triggerR_raw;
-
     // Set buttons to inputs
     GPIO_PORTB_DEN_R = set_bit_field_u32(GPIO_PORTB_DEN_R, 0, 2, 0b11);
     GPIO_PORTB_DIR_R = set_bit_field_u32(GPIO_PORTB_DIR_R, 0, 2, 0b00);
@@ -241,9 +294,9 @@ HumanInputsTask(void) {
         ADC_Init(1);
         triggerR_raw = ADC_In();
 
-        btnA = GPIO_PORTB_DATA_R & generate_bit_mask_u32(0, 1);
-        btnB = GPIO_PORTB_DATA_R & generate_bit_mask_u32(1, 1);
-        btnStart = GPIO_PORTB_DATA_R & generate_bit_mask_u32(5, 1);
+        btnA = !(GPIO_PORTB_DATA_R & generate_bit_mask_u32(0, 1));
+        btnB = !(GPIO_PORTB_DATA_R & generate_bit_mask_u32(1, 1));
+        btnStart = !(GPIO_PORTB_DATA_R & generate_bit_mask_u32(5, 1));
 
         joystickH = joystickH_raw;
         joystickV = joystickV_raw;
@@ -254,17 +307,25 @@ HumanInputsTask(void) {
     }
 }
 
+char str_connected[] = "Connected: ";
+char str_left[] = "Left: ";
+char str_mid[] = "Mid: ";
+char str_right[] = "Right: ";
+char str_motorL[] = "MotorL: ";
+char str_motorR[] = "MotorR: ";
+
 void
 ScreenDisplayTask(void) {
     int time;
     while (1) {
         time = OS_MsTime();
-        ILI9341_Message(0, 1, "Connected: ", time - lastHeartbeat < 1000);
-        ILI9341_Message(1, 0, "Left: ", sensor_l);
-        ILI9341_Message(1, 1, "Mid: ", sensor_m);
-        ILI9341_Message(1, 2, "Right: ", sensor_r);
-        ILI9341_Message(1, 4, "tl: ", triggerL_raw);
-        ILI9341_Message(1, 4, "tr: ", triggerR_raw);
+        ILI9341_Message(0, 1, str_connected, isConnected);
+        ILI9341_Message(1, 0, str_left, sensor_l);
+        ILI9341_Message(1, 1, str_mid, sensor_m);
+        ILI9341_Message(1, 2, str_right, sensor_r);
+
+        ILI9341_Message(0, 4, str_motorL, leftMotor);
+        ILI9341_Message(0, 5, str_motorR, rightMotor);
         OS_Sleep(100);
     }
 }
@@ -287,7 +348,7 @@ realmain(void) {        // lab 4 real main
     NumCreated += OS_AddThread(&Interpreter, 128, 4);
     NumCreated += OS_AddThread(&HumanInputsTask, 128, 3);
     NumCreated += OS_AddThread(&ScreenDisplayTask, 128, 4);
-    NumCreated += OS_AddThread(&Heartbeat_Task, 128, 3);
+    NumCreated += OS_AddThread(&Request_Task, 128, 3);
     NumCreated += OS_AddThread(&ProcessHC12RxBuffer, 128, 2);
     NumCreated += OS_AddThread(&Idle, 128, 5); // runs when nothing useful to do
 
