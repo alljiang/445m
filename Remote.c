@@ -155,32 +155,38 @@ Request_Task(void) {
 
     while (1) {
         time = OS_MsTime();
+        heartbeatRequested = false;
+        sensorRequested = false;
         if (!sensorRequested && !heartbeatRequested) {
-            if (time - heartbeatRequestTime > 300) {
+            if (time - heartbeatRequestTime > 50) {
                 heartbeatRequested = true;
                 heartbeatRequestTime = time;
 
                 HC12_SendData(0, heartbeat_data);
-            } else if (time - sensorRequestTime > 300) {
-                sensorRequested = true;
-                sensorRequestTime = time;
-
-                HC12_SendData(4, sensorRequest_data);
             } else if (time - lastMotorSendTime > 50) {
                 lastMotorSendTime = time;
 
-                if (triggerL_raw < 1000) leftMotor = 800;
+                if (triggerL_raw < 1000) rightMotor = 900;
+                else rightMotor = 0;
+
+                if (triggerR_raw > 1500) leftMotor = 900;
                 else leftMotor = 0;
 
-                if (triggerR_raw > 1500) rightMotor = 800;
-                else rightMotor = 0;
+//                if (triggerL_raw < 1000) leftMotor = 900;
+//                else leftMotor = 0;
+
+//                if (triggerR_raw > 1500) rightMotor = 900;
+//                else rightMotor = 0;
 
                 if (!btnA && !btnB) {
                     leftMotor = 0;
                     rightMotor = 0;
                 } else if (btnA) {
-                    leftMotor = -leftMotor;
-                    rightMotor = -rightMotor;
+//                    leftMotor = -leftMotor;
+//                    rightMotor = -rightMotor;
+                    int temp = leftMotor;
+                    leftMotor = -rightMotor;
+                    rightMotor = -temp;
                 }
 
                 uint8_t motorData[] = {(uint8_t)(leftMotor >> 8),
@@ -189,14 +195,6 @@ Request_Task(void) {
                                         (uint8_t)(rightMotor & 0xFF)};
                 HC12_SendData(2, motorData);
             }
-        } else if (heartbeatRequested && time - heartbeatRequestTime > 100) {
-            // check if re-request necessary
-            heartbeatRequestTime = time;
-            HC12_SendData(0, heartbeat_data);
-        } else if (sensorRequested && time - sensorRequestTime > 100) {
-            // check if re-request necessary
-            sensorRequestTime = time;
-            HC12_SendData(4, sensorRequest_data);
         }
 
         isConnected = (time - lastHeartbeat < 1000) && (lastHeartbeat > -1);
@@ -349,7 +347,7 @@ realmain(void) {        // lab 4 real main
     NumCreated += OS_AddThread(&HumanInputsTask, 128, 3);
     NumCreated += OS_AddThread(&ScreenDisplayTask, 128, 4);
     NumCreated += OS_AddThread(&Request_Task, 128, 3);
-    NumCreated += OS_AddThread(&ProcessHC12RxBuffer, 128, 2);
+//    NumCreated += OS_AddThread(&ProcessHC12RxBuffer, 128, 2);
     NumCreated += OS_AddThread(&Idle, 128, 5); // runs when nothing useful to do
 
     OS_Launch(TIMESLICE); // doesn't return, interrupts enabled in here

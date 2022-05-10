@@ -131,7 +131,7 @@ RequestHandler_Task(void) {
         int time = OS_MsTime();
 
         if (heartbeatRequested && time - heartbeatRequestTime > 10) {
-            HC12_SendData(1, heartbeat_data);
+//            HC12_SendData(1, heartbeat_data);
             heartbeatRequested = false;
         } else if (sensorRequested && time - sensorRequestTime > 10) {
             // get sensor readings
@@ -141,7 +141,7 @@ RequestHandler_Task(void) {
 
             // send sensor data
             uint8_t sensor_data[4] = {rl, rm , rr, 0x0};
-            HC12_SendData(3, sensor_data);
+//            HC12_SendData(3, sensor_data);
             sensorRequested = false;
         }
 
@@ -193,9 +193,9 @@ ProcessHC12RxBuffer() {
                 }
             } else if (header == 2) {
                 // motor speed
-                int left = rxBuffer[(rxBufferStart + 1) % sizeof(rxBuffer)] << 8;
+                int16_t left = rxBuffer[(rxBufferStart + 1) % sizeof(rxBuffer)] << 8;
                 left |= rxBuffer[(rxBufferStart + 2) % sizeof(rxBuffer)];
-                int right = rxBuffer[(rxBufferStart + 3) % sizeof(rxBuffer)] << 8;
+                int16_t right = rxBuffer[(rxBufferStart + 3) % sizeof(rxBuffer)] << 8;
                 right |= rxBuffer[(rxBufferStart + 4) % sizeof(rxBuffer)];
 
                 motor_left = left;
